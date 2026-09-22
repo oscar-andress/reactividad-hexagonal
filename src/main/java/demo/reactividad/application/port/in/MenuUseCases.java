@@ -12,4 +12,5 @@ public interface MenuUseCases {
     Mono<Void> deleteMenu(UUID menuId);
     Flux<Menu> streamMenus();
     Flux<Menu> createMenus(Flux<Menu> menus);
+    Mono<Menu> updateMenu(Menu menu);
 }

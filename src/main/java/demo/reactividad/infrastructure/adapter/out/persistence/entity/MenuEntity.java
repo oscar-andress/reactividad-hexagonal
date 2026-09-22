@@ -4,10 +4,10 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Version;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -17,7 +17,6 @@ import lombok.ToString;
 @Getter
 @Setter
 @NoArgsConstructor
-@AllArgsConstructor
 @ToString
 public class MenuEntity {
 
@@ -33,4 +32,15 @@ public class MenuEntity {
 
     @Column("menu_created_at")
     private LocalDateTime createdAt;
+
+    @Version
+    @Column("menu_version")
+    private Long version;
+
+    public MenuEntity(UUID id, String title, String description, LocalDateTime createdAt) {
+        this.id = id;
+        this.title = title;
+        this.description = description;
+        this.createdAt = createdAt;
+    }
 }

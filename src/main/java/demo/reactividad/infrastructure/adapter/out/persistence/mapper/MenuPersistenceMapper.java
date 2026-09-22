@@ -9,10 +9,14 @@ import demo.reactividad.infrastructure.adapter.out.persistence.entity.MenuEntity
 public class MenuPersistenceMapper {
 
     public Menu toDomain(MenuEntity entity) {
-        return new Menu(entity.getId(), entity.getTitle(), entity.getDescription(), entity.getCreatedAt());
+        Menu menu = new Menu(entity.getId(), entity.getTitle(), entity.getDescription(), entity.getCreatedAt());
+        menu.setVersion(entity.getVersion());
+        return menu;
     }
 
     public MenuEntity toEntity(Menu menu) {
-        return new MenuEntity(menu.getId(), menu.getTitle(), menu.getDescription(), menu.getCreatedAt());
+        MenuEntity entity = new MenuEntity(menu.getId(), menu.getTitle(), menu.getDescription(), menu.getCreatedAt());
+        entity.setVersion(menu.getVersion());
+        return entity;
     }
 }
