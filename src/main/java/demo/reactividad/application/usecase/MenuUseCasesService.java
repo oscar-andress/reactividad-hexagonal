@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +14,7 @@ import demo.reactividad.application.port.out.MenuEventPublisher;
 import demo.reactividad.application.port.out.MenuRepositoryPort;
 import demo.reactividad.domain.exception.MenuCodeException;
 import demo.reactividad.domain.exception.MenuNotFoundException;
+import demo.reactividad.domain.exception.MenuUnavailableException;
 import demo.reactividad.domain.model.Menu;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -73,5 +75,22 @@ public class MenuUseCasesService implements MenuUseCases {
                             return Flux.empty();
                         }))
                 .delayElements(Duration.ofSeconds(2));
+    }
+
+    @Override
+    @Transactional
+    public Mono<Menu> updateMenu(Menu menu) {
+        return this.menuRepositoryPort
+                   .findById(menu.getId())
+                   .switchIfEmpty(Mono.error(() -> new MenuNotFoundException("Menu with id "+ menu.getId() + " not found", MenuCodeException.NOT_FOUND.name())))
+                   .flatMap(existingMenu -> {
+                        Menu updated = existingMenu.withUpdatedDetails(menu.getTitle(), menu.getDescription());
+                        return this.menuRepositoryPort.save(updated);
+                   })
+                   .doOnNext(this.menuEventPublisher::publish)
+                   .onErrorMap(OptimisticLockingFailureException.class,
+                           ex -> new MenuUnavailableException(
+                                   "Menu with id " + menu.getId() + " was updated concurrently, please retry",
+                                   MenuCodeException.CONFLICT.name()));
     }
 }

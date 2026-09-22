@@ -19,9 +19,16 @@ public class Menu {
     private String title;
     private String description;
     private LocalDateTime createdAt;
+    private Long version;
     private Set<FoodType> foodTypes = Set.of();
 
     public Menu(String title, String description) {
+        this.title = title;
+        this.description = description;
+    }
+
+    public Menu(UUID id, String title, String description) {
+        this.id = id;
         this.title = title;
         this.description = description;
     }
@@ -31,5 +38,9 @@ public class Menu {
         this.title = title;
         this.description = description;
         this.createdAt = createdAt;
+    }
+
+    public Menu withUpdatedDetails(String title, String description) {
+        return new Menu(this.id, title, description);
     }
 }

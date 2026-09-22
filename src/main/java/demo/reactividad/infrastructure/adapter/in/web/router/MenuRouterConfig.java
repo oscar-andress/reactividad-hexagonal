@@ -42,6 +42,7 @@ public class MenuRouterConfig {
                   this.menuHandler::create1MillionMenu)
             .POST("/", this.menuHandler::createMenu)
             .DELETE("/", this.menuHandler::deleteMenu)
+            .PUT("/{menuId}", this.menuHandler::updateMenu)
             .onError(MenuNotFoundException.class, this.globalExceptionHandler::handleMenuNotFoundException)
             .onError(MenuUnavailableException.class, this.globalExceptionHandler::handleMenuUnavailableException)
             .build();

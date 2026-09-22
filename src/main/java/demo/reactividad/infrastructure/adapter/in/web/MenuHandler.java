@@ -10,6 +10,7 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 
 import demo.reactividad.application.port.in.MenuUseCases;
 import demo.reactividad.infrastructure.adapter.in.web.dto.request.MenuCreateRequestDTO;
+import demo.reactividad.infrastructure.adapter.in.web.dto.request.MenuUpdateRequestDTO;
 import demo.reactividad.infrastructure.adapter.in.web.dto.response.MenuResponseDTO;
 import demo.reactividad.infrastructure.adapter.in.web.mapper.MenuWebMapper;
 import lombok.RequiredArgsConstructor;
@@ -58,5 +59,14 @@ public class MenuHandler {
         return ServerResponse.status(HttpStatus.ACCEPTED)
                 .contentType(MediaType.APPLICATION_NDJSON)
                 .body(responseFlux, MenuResponseDTO.class);
+    }
+
+    public Mono<ServerResponse> updateMenu(ServerRequest request) {
+        UUID menuId = UUID.fromString(request.pathVariable("menuId"));
+        return request.bodyToMono(MenuUpdateRequestDTO.class)
+                      .map(dto -> this.menuWebMapper.toDomain(menuId, dto))
+                      .flatMap(this.menuUseCases::updateMenu)
+                      .map(this.menuWebMapper::toResponseDTO)
+                      .flatMap(dto -> ServerResponse.ok().bodyValue(dto));
     }
 }
