@@ -15,6 +15,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 import demo.reactividad.infrastructure.adapter.in.web.dto.request.MenuCreateRequestDTO;
+import demo.reactividad.infrastructure.adapter.in.web.dto.request.MenuUpdateRequestDTO;
 import demo.reactividad.infrastructure.adapter.in.web.dto.response.MenuResponseDTO;
 import demo.reactividad.infrastructure.adapter.out.persistence.entity.MenuEntity;
 import demo.reactividad.infrastructure.adapter.out.persistence.repository.MenuR2dbcRepository;
@@ -43,7 +44,8 @@ class MenuWebIntegrationTest extends AbstractPostgresContainerTest {
     @BeforeEach
     void setUp() {
         this.existingMenu = this.menuR2dbcRepository.deleteAll()
-                .then(this.menuR2dbcRepository.save(new MenuEntity(null, "DEVOS", "Menu de prueba", null)))
+                .then(this.menuR2dbcRepository.save(new MenuEntity(null, "DEVOS", "Menu de prueba", null))
+                          .doOnNext(l -> log.info("{}", l)))
                 .block();
     }
 
@@ -95,6 +97,22 @@ class MenuWebIntegrationTest extends AbstractPostgresContainerTest {
                 .exchange()
                 .expectStatus().is2xxSuccessful()
                 .expectHeader().contentType(MediaType.APPLICATION_JSON)
+                .expectBody()
+                .consumeWith(r -> log.info("{}", new String(r.getResponseBody(), StandardCharsets.UTF_8)))
+                .jsonPath("$.menuTitle").isEqualTo(menu.menuTitle());
+    }
+
+    @Test
+    void putMenu_Success() {
+        MenuUpdateRequestDTO menu = new MenuUpdateRequestDTO("Updated title", "Updated description");
+
+        this.webTestClient.put()
+                .uri(MENU_PATH + "/{menuId}", this.existingMenu.getId())
+                .header(AUTH_HEADER, PRIME_TOKEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(menu)
+                .exchange()
+                .expectStatus().is2xxSuccessful()
                 .expectBody()
                 .consumeWith(r -> log.info("{}", new String(r.getResponseBody(), StandardCharsets.UTF_8)))
                 .jsonPath("$.menuTitle").isEqualTo(menu.menuTitle());

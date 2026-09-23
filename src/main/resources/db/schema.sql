@@ -7,6 +7,7 @@ create table tbl_menu(
     menu_description varchar(50) not null,
     menu_created_at timestamp default current_timestamp not null,
     menu_version bigint default 0 not null,
+    menu_image_key varchar(500),
     CONSTRAINT tbl_menu_pk primary key (menu_id)
 );
 

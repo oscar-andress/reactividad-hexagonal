@@ -13,4 +13,5 @@ public interface MenuUseCases {
     Flux<Menu> streamMenus();
     Flux<Menu> createMenus(Flux<Menu> menus);
     Mono<Menu> updateMenu(Menu menu);
+    Mono<Menu> uploadMenuImage(UUID menuId, byte[] imageContent, String contentType);
 }

@@ -9,6 +9,7 @@ public record MenuResponseDTO(
     String menuTitle,
     String menuDescription,
     LocalDateTime menuCreatedAt,
+    String menuImageUrl,
     Set<FoodTypeResponseDTO> foodTypes
 ) {
 
