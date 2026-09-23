@@ -13,6 +13,7 @@ import demo.reactividad.infrastructure.adapter.in.web.dto.request.MenuCreateRequ
 import demo.reactividad.infrastructure.adapter.in.web.dto.request.MenuUpdateRequestDTO;
 import demo.reactividad.infrastructure.adapter.in.web.dto.response.MenuResponseDTO;
 import demo.reactividad.infrastructure.adapter.in.web.mapper.MenuWebMapper;
+import demo.reactividad.infrastructure.adapter.in.web.multipart.MultipartFilePartExtractor;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -21,8 +22,11 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class MenuHandler {
 
+    private static final String IMAGE_PART_NAME = "image";
+
     private final MenuUseCases menuUseCases;
     private final MenuWebMapper menuWebMapper;
+    private final MultipartFilePartExtractor multipartFilePartExtractor;
 
     public Mono<ServerResponse> getMenu(ServerRequest request) {
         UUID menuId = UUID.fromString(request.pathVariable("menuId"));
@@ -68,5 +72,13 @@ public class MenuHandler {
                       .flatMap(this.menuUseCases::updateMenu)
                       .map(this.menuWebMapper::toResponseDTO)
                       .flatMap(dto -> ServerResponse.ok().bodyValue(dto));
+    }
+
+    public Mono<ServerResponse> uploadMenuImage(ServerRequest request) {
+        UUID menuId = UUID.fromString(request.pathVariable("menuId"));
+        return this.multipartFilePartExtractor.extract(request, IMAGE_PART_NAME)
+                .flatMap(file -> this.menuUseCases.uploadMenuImage(menuId, file.content(), file.contentType()))
+                .map(this.menuWebMapper::toResponseDTO)
+                .flatMap(dto -> ServerResponse.ok().bodyValue(dto));
     }
 }

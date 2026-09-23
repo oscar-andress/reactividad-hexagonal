@@ -25,6 +25,7 @@ public class MenuWebMapper {
             menu.getTitle(),
             menu.getDescription(),
             menu.getCreatedAt(),
+            menu.getImageUrl(),
             foodTypes);
     }
 

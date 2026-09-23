@@ -10,6 +10,7 @@ import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
+import demo.reactividad.domain.exception.ImageStorageException;
 import demo.reactividad.domain.exception.MenuNotFoundException;
 import demo.reactividad.domain.exception.MenuUnavailableException;
 import demo.reactividad.infrastructure.adapter.in.web.MenuHandler;
@@ -41,10 +42,14 @@ public class MenuRouterConfig {
                   .and(accept(MediaType.APPLICATION_NDJSON)),
                   this.menuHandler::create1MillionMenu)
             .POST("/", this.menuHandler::createMenu)
-            .DELETE("/", this.menuHandler::deleteMenu)
+            .DELETE("/{menuId}", this.menuHandler::deleteMenu)
             .PUT("/{menuId}", this.menuHandler::updateMenu)
+            .POST("/{menuId}/image",
+                  contentType(MediaType.MULTIPART_FORM_DATA),
+                  this.menuHandler::uploadMenuImage)
             .onError(MenuNotFoundException.class, this.globalExceptionHandler::handleMenuNotFoundException)
             .onError(MenuUnavailableException.class, this.globalExceptionHandler::handleMenuUnavailableException)
+            .onError(ImageStorageException.class, this.globalExceptionHandler::handleImageStorageException)
             .build();
     }
 }

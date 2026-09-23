@@ -10,6 +10,7 @@
   - Uso de Early Returns (Guard Clauses) para evitar anidaciones profundas.
   - Cero valores mágicos; usa constantes o enumeraciones.
   - Manejo controlado de errores con excepciones o tipos de dominio específicos.
+  - Código simple y mínimo para lograr el objetivo: evitar sobreingeniería, abstracciones prematuras o funcionalidad no solicitada.
 
 ## 2. Testing y Calidad
 - Cada nuevo caso de uso o lógica de negocio debe incluir sus pruebas unitarias.

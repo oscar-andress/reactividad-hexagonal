@@ -37,6 +37,9 @@ public class MenuEntity {
     @Column("menu_version")
     private Long version;
 
+    @Column("menu_image_key")
+    private String imageKey;
+
     public MenuEntity(UUID id, String title, String description, LocalDateTime createdAt) {
         this.id = id;
         this.title = title;
