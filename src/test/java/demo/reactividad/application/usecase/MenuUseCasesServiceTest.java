@@ -1,5 +1,6 @@
 package demo.reactividad.application.usecase;
 
+import static demo.reactividad.testsupport.fixtures.MenuTestDataBuilder.aMenu;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -59,7 +60,7 @@ class MenuUseCasesServiceTest {
 
     @Test
     void getMenu_WhenMenuExists_ReturnsMenuWithFoodTypes() {
-        Menu menu = new Menu(MENU_ID, "DEVOS", "Menu de prueba", null);
+        Menu menu = aMenu().withId(MENU_ID).build();
         FoodType foodType = new FoodType(UUID.randomUUID(), "Vegano", true);
         when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(menu));
         when(this.foodTypeRepositoryPort.findFoodTypeByMenuId(MENU_ID)).thenReturn(Flux.just(foodType));
@@ -76,8 +77,7 @@ class MenuUseCasesServiceTest {
 
     @Test
     void getMenu_WhenMenuHasImage_ReturnsPresignedUrl() {
-        Menu menu = new Menu(MENU_ID, "DEVOS", "Menu de prueba", null);
-        menu.setImageKey(MENU_ID.toString());
+        Menu menu = aMenu().withId(MENU_ID).withImageKey(MENU_ID.toString()).build();
         String presignedUrl = "http://localhost:4566/imagenes-menu/" + MENU_ID + "?X-Amz-Signature=abc";
         when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(menu));
         when(this.foodTypeRepositoryPort.findFoodTypeByMenuId(MENU_ID)).thenReturn(Flux.empty());
@@ -94,7 +94,7 @@ class MenuUseCasesServiceTest {
 
     @Test
     void getMenu_WhenMenuHasNoImage_SkipsPresignedUrlGeneration() {
-        Menu menu = new Menu(MENU_ID, "DEVOS", "Menu de prueba", null);
+        Menu menu = aMenu().withId(MENU_ID).build();
         when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(menu));
         when(this.foodTypeRepositoryPort.findFoodTypeByMenuId(MENU_ID)).thenReturn(Flux.empty());
 
@@ -119,8 +119,8 @@ class MenuUseCasesServiceTest {
 
     @Test
     void createMenu_Success_PublishesEvent() {
-        Menu menu = new Menu("DEVOS", "Menu de prueba");
-        Menu savedMenu = new Menu(MENU_ID, "DEVOS", "Menu de prueba", null);
+        Menu menu = aMenu().build();
+        Menu savedMenu = aMenu().withId(MENU_ID).build();
         when(this.menuRepositoryPort.save(menu)).thenReturn(Mono.just(savedMenu));
 
         this.menuUseCasesService.createMenu(menu)
@@ -146,7 +146,7 @@ class MenuUseCasesServiceTest {
 
     @Test
     void streamMenus_DelegatesToEventPublisher() {
-        Menu menu = new Menu(MENU_ID, "DEVOS", "Menu de prueba", null);
+        Menu menu = aMenu().withId(MENU_ID).build();
         when(this.menuEventPublisher.subscribe()).thenReturn(Flux.just(menu));
 
         this.menuUseCasesService.streamMenus()
@@ -158,7 +158,7 @@ class MenuUseCasesServiceTest {
 
     @Test
     void createMenus_SavesInBatchesAndSwallowsBatchErrors() {
-        Menu menu = new Menu("DEVOS", "Menu de prueba");
+        Menu menu = aMenu().build();
         when(this.menuRepositoryPort.saveAll(List.of(menu)))
                 .thenReturn(Flux.error(new RuntimeException("db down")));
 
@@ -174,11 +174,19 @@ class MenuUseCasesServiceTest {
     @Test
     void updateMenu_Success_PreservesVersionImageKeyAndCreatedAtThenPublishesEvent() {
         LocalDateTime createdAt = LocalDateTime.of(2026, 1, 1, 10, 0);
-        Menu existingMenu = new Menu(MENU_ID, "DEVOS", "Menu de prueba", createdAt);
-        existingMenu.setVersion(2L);
-        existingMenu.setImageKey("existing-image-key");
-        Menu incoming = new Menu(MENU_ID, "New title", "New description");
-        Menu savedMenu = new Menu(MENU_ID, "New title", "New description", createdAt);
+        Menu existingMenu = aMenu()
+                .withId(MENU_ID)
+                .withCreatedAt(createdAt)
+                .withVersion(2L)
+                .withImageKey("existing-image-key")
+                .build();
+        Menu incoming = aMenu().withId(MENU_ID).withTitle("New title").withDescription("New description").build();
+        Menu savedMenu = aMenu()
+                .withId(MENU_ID)
+                .withTitle("New title")
+                .withDescription("New description")
+                .withCreatedAt(createdAt)
+                .build();
 
         when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(existingMenu));
         when(this.menuRepositoryPort.save(any(Menu.class))).thenReturn(Mono.just(savedMenu));
@@ -202,7 +210,7 @@ class MenuUseCasesServiceTest {
 
     @Test
     void updateMenu_WhenMenuDoesNotExist_ThrowsMenuNotFoundException() {
-        Menu incoming = new Menu(MENU_ID, "New title", "New description");
+        Menu incoming = aMenu().withId(MENU_ID).withTitle("New title").withDescription("New description").build();
         when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.empty());
 
         this.menuUseCasesService.updateMenu(incoming)
@@ -215,8 +223,8 @@ class MenuUseCasesServiceTest {
 
     @Test
     void updateMenu_WhenSaveFailsWithOptimisticLock_MapsToMenuUnavailableException() {
-        Menu existingMenu = new Menu(MENU_ID, "DEVOS", "Menu de prueba", null);
-        Menu incoming = new Menu(MENU_ID, "New title", "New description");
+        Menu existingMenu = aMenu().withId(MENU_ID).build();
+        Menu incoming = aMenu().withId(MENU_ID).withTitle("New title").withDescription("New description").build();
 
         when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(existingMenu));
         when(this.menuRepositoryPort.save(any(Menu.class)))
@@ -230,10 +238,9 @@ class MenuUseCasesServiceTest {
 
     @Test
     void uploadMenuImage_Success_StoresImageKeyAndPublishesEvent() {
-        Menu existingMenu = new Menu(MENU_ID, "DEVOS", "Menu de prueba", null);
+        Menu existingMenu = aMenu().withId(MENU_ID).build();
         byte[] content = "image-bytes".getBytes();
-        Menu updatedMenu = new Menu(MENU_ID, "DEVOS", "Menu de prueba", null);
-        updatedMenu.setImageKey(MENU_ID.toString());
+        Menu updatedMenu = aMenu().withId(MENU_ID).withImageKey(MENU_ID.toString()).build();
 
         when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(existingMenu));
         when(this.imageStoragePort.upload(MENU_ID.toString(), content, "image/png")).thenReturn(Mono.empty());
@@ -266,7 +273,7 @@ class MenuUseCasesServiceTest {
 
     @Test
     void uploadMenuImage_WhenSaveFails_DeletesUploadedImageAndPropagatesOriginalError() {
-        Menu existingMenu = new Menu(MENU_ID, "DEVOS", "Menu de prueba", null);
+        Menu existingMenu = aMenu().withId(MENU_ID).build();
         byte[] content = "image-bytes".getBytes();
         RuntimeException saveError = new RuntimeException("db down");
 
@@ -285,7 +292,7 @@ class MenuUseCasesServiceTest {
 
     @Test
     void uploadMenuImage_WhenSaveAndCompensationDeleteBothFail_StillPropagatesOriginalSaveError() {
-        Menu existingMenu = new Menu(MENU_ID, "DEVOS", "Menu de prueba", null);
+        Menu existingMenu = aMenu().withId(MENU_ID).build();
         byte[] content = "image-bytes".getBytes();
         RuntimeException saveError = new RuntimeException("db down");
         RuntimeException deleteError = new RuntimeException("s3 down");

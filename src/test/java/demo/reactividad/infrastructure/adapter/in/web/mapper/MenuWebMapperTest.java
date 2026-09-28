@@ -1,5 +1,7 @@
 package demo.reactividad.infrastructure.adapter.in.web.mapper;
 
+import static demo.reactividad.testsupport.fixtures.MenuTestDataBuilder.aMenu;
+
 import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
@@ -20,8 +22,11 @@ class MenuWebMapperTest {
     void toResponseDTO_MapsMenuAndItsFoodTypes() {
         UUID id = UUID.randomUUID();
         LocalDateTime now = LocalDateTime.now();
-        Menu menu = new Menu(id, "DEVOS", "Menu de prueba", now);
-        menu.setFoodTypes(Set.of(new FoodType(UUID.randomUUID(), "Vegano", true)));
+        Menu menu = aMenu()
+                .withId(id)
+                .withCreatedAt(now)
+                .withFoodTypes(Set.of(new FoodType(UUID.randomUUID(), "Vegano", true)))
+                .build();
 
         MenuResponseDTO dto = this.mapper.toResponseDTO(menu);
 

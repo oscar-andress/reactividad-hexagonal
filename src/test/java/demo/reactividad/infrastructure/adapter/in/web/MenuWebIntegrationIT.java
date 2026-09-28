@@ -1,5 +1,7 @@
 package demo.reactividad.infrastructure.adapter.in.web;
 
+import static demo.reactividad.testsupport.fixtures.MenuEntityTestDataBuilder.aMenuEntity;
+
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.UUID;
@@ -44,7 +46,7 @@ class MenuWebIntegrationIT extends AbstractPostgresContainerTest {
     @BeforeEach
     void setUp() {
         this.existingMenu = this.menuR2dbcRepository.deleteAll()
-                .then(this.menuR2dbcRepository.save(new MenuEntity(null, "DEVOS", "Menu de prueba", null))
+                .then(this.menuR2dbcRepository.save(aMenuEntity().build())
                           .doOnNext(l -> log.info("{}", l)))
                 .block();
     }

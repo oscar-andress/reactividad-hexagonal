@@ -1,5 +1,7 @@
 package demo.reactividad.infrastructure.adapter.out.persistence;
 
+import static demo.reactividad.testsupport.fixtures.MenuEntityTestDataBuilder.aMenuEntity;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,8 +18,6 @@ import reactor.test.StepVerifier;
 @DataR2dbcTest
 class MenuR2dbcRepositoryIT extends AbstractPostgresContainerTest {
 
-    private static final String TITLE = "DEVOS";
-    private static final String DESCRIPTION = "Menu de prueba";
     private static final String UPDATED_DESCRIPTION = "Lorem Ipsum";
     private static final Logger log = LoggerFactory.getLogger(MenuR2dbcRepositoryIT.class);
 
@@ -29,7 +29,7 @@ class MenuR2dbcRepositoryIT extends AbstractPostgresContainerTest {
     @BeforeEach
     void setUp() {
         this.menu = this.menuR2dbcRepository.deleteAll()
-                .then(this.menuR2dbcRepository.save(new MenuEntity(null, TITLE, DESCRIPTION, null)))
+                .then(this.menuR2dbcRepository.save(aMenuEntity().build()))
                 .block();
     }
 
@@ -39,8 +39,8 @@ class MenuR2dbcRepositoryIT extends AbstractPostgresContainerTest {
                 .doOnNext(m -> log.info("{}", m))
                 .as(StepVerifier::create)
                 .assertNext(m -> {
-                    Assertions.assertEquals(TITLE, m.getTitle());
-                    Assertions.assertEquals(DESCRIPTION, m.getDescription());
+                    Assertions.assertEquals(this.menu.getTitle(), m.getTitle());
+                    Assertions.assertEquals(this.menu.getDescription(), m.getDescription());
                 })
                 .expectComplete()
                 .verify();
@@ -51,7 +51,7 @@ class MenuR2dbcRepositoryIT extends AbstractPostgresContainerTest {
         this.menuR2dbcRepository.findById(this.menu.getId())
                 .doOnNext(m -> log.info("{}", m))
                 .as(StepVerifier::create)
-                .assertNext(m -> Assertions.assertEquals(TITLE, m.getTitle()))
+                .assertNext(m -> Assertions.assertEquals(this.menu.getTitle(), m.getTitle()))
                 .expectComplete()
                 .verify();
     }
@@ -78,7 +78,7 @@ class MenuR2dbcRepositoryIT extends AbstractPostgresContainerTest {
 
     @Test
     void save_WhenTitleIsNull_Fails() {
-        MenuEntity invalidMenu = new MenuEntity(null, null, DESCRIPTION, null);
+        MenuEntity invalidMenu = aMenuEntity().withTitle(null).build();
 
         this.menuR2dbcRepository.save(invalidMenu)
                 .as(StepVerifier::create)

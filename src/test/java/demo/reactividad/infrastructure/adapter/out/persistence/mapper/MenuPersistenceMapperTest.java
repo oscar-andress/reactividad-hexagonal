@@ -1,5 +1,8 @@
 package demo.reactividad.infrastructure.adapter.out.persistence.mapper;
 
+import static demo.reactividad.testsupport.fixtures.MenuEntityTestDataBuilder.aMenuEntity;
+import static demo.reactividad.testsupport.fixtures.MenuTestDataBuilder.aMenu;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -17,7 +20,7 @@ class MenuPersistenceMapperTest {
     void toDomain_MapsAllFields() {
         UUID id = UUID.randomUUID();
         LocalDateTime now = LocalDateTime.now();
-        MenuEntity entity = new MenuEntity(id, "DEVOS", "Menu de prueba", now);
+        MenuEntity entity = aMenuEntity().withId(id).withCreatedAt(now).build();
 
         Menu menu = this.mapper.toDomain(entity);
 
@@ -31,7 +34,7 @@ class MenuPersistenceMapperTest {
     void toEntity_MapsAllFields() {
         UUID id = UUID.randomUUID();
         LocalDateTime now = LocalDateTime.now();
-        Menu menu = new Menu(id, "DEVOS", "Menu de prueba", now);
+        Menu menu = aMenu().withId(id).withCreatedAt(now).build();
 
         MenuEntity entity = this.mapper.toEntity(menu);
 
