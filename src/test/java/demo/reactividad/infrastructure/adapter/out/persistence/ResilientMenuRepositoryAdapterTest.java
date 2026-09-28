@@ -1,5 +1,7 @@
 package demo.reactividad.infrastructure.adapter.out.persistence;
 
+import static demo.reactividad.testsupport.fixtures.MenuTestDataBuilder.aMenu;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -35,7 +37,7 @@ class ResilientMenuRepositoryAdapterTest {
 
     @Test
     void findById_DelegatesToWrappedAdapter() {
-        Menu menu = new Menu("DEVOS", "Menu de prueba");
+        Menu menu = aMenu().build();
         when(this.delegate.findById(MENU_ID)).thenReturn(Mono.just(menu));
 
         this.resilientAdapter.findById(MENU_ID)
@@ -55,7 +57,7 @@ class ResilientMenuRepositoryAdapterTest {
 
     @Test
     void save_DelegatesToWrappedAdapter() {
-        Menu menu = new Menu("DEVOS", "Menu de prueba");
+        Menu menu = aMenu().build();
         when(this.delegate.save(menu)).thenReturn(Mono.just(menu));
 
         this.resilientAdapter.save(menu)
@@ -79,7 +81,7 @@ class ResilientMenuRepositoryAdapterTest {
 
     @Test
     void saveAll_DelegatesToWrappedAdapter() {
-        Menu menu = new Menu("DEVOS", "Menu de prueba");
+        Menu menu = aMenu().build();
         when(this.delegate.saveAll(List.of(menu))).thenReturn(Flux.just(menu));
 
         this.resilientAdapter.saveAll(List.of(menu))

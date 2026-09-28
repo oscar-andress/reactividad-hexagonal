@@ -1,5 +1,6 @@
 package demo.reactividad.domain.model;
 
+import static demo.reactividad.testsupport.fixtures.MenuTestDataBuilder.aMenu;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.time.LocalDateTime;
@@ -13,9 +14,14 @@ class MenuTest {
     void withUpdatedDetails_PreservesIdentityAndAuditFields() {
         UUID id = UUID.randomUUID();
         LocalDateTime createdAt = LocalDateTime.of(2026, 1, 1, 10, 0);
-        Menu original = new Menu(id, "Original title", "Original description", createdAt);
-        original.setVersion(3L);
-        original.setImageKey("some-image-key");
+        Menu original = aMenu()
+                .withId(id)
+                .withTitle("Original title")
+                .withDescription("Original description")
+                .withCreatedAt(createdAt)
+                .withVersion(3L)
+                .withImageKey("some-image-key")
+                .build();
 
         Menu updated = original.withUpdatedDetails("New title", "New description");
 
