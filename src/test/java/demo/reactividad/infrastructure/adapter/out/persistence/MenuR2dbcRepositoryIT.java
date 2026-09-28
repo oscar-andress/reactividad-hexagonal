@@ -14,12 +14,12 @@ import demo.reactividad.testsupport.containers.AbstractPostgresContainerTest;
 import reactor.test.StepVerifier;
 
 @DataR2dbcTest
-class MenuR2dbcRepositoryTest extends AbstractPostgresContainerTest {
+class MenuR2dbcRepositoryIT extends AbstractPostgresContainerTest {
 
     private static final String TITLE = "DEVOS";
     private static final String DESCRIPTION = "Menu de prueba";
     private static final String UPDATED_DESCRIPTION = "Lorem Ipsum";
-    private static final Logger log = LoggerFactory.getLogger(MenuR2dbcRepositoryTest.class);
+    private static final Logger log = LoggerFactory.getLogger(MenuR2dbcRepositoryIT.class);
 
     @Autowired
     private MenuR2dbcRepository menuR2dbcRepository;
