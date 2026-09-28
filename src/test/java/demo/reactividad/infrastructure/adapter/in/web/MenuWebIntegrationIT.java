@@ -24,14 +24,14 @@ import reactor.test.StepVerifier;
 
 @AutoConfigureWebTestClient
 @SpringBootTest
-class MenuWebIntegrationTest extends AbstractPostgresContainerTest {
+class MenuWebIntegrationIT extends AbstractPostgresContainerTest {
 
     private static final String MENU_PATH = "/api/v1/menu";
     private static final String AUTH_HEADER = "auth-token";
     private static final String STANDARD_TOKEN = "secret123";
     private static final String PRIME_TOKEN = "secret456";
     private static final Duration STREAM_TIMEOUT = Duration.ofSeconds(5);
-    private static final Logger log = LoggerFactory.getLogger(MenuWebIntegrationTest.class);
+    private static final Logger log = LoggerFactory.getLogger(MenuWebIntegrationIT.class);
 
     @Autowired
     private WebTestClient webTestClient;
