@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import demo.reactividad.domain.model.FoodType;
 import demo.reactividad.domain.model.Menu;
 import demo.reactividad.infrastructure.adapter.in.web.dto.request.MenuCreateRequestDTO;
+import demo.reactividad.infrastructure.adapter.in.web.dto.request.MenuUpdateRequestDTO;
 import demo.reactividad.infrastructure.adapter.in.web.dto.response.MenuResponseDTO;
 
 class MenuWebMapperTest {
@@ -45,5 +46,17 @@ class MenuWebMapperTest {
 
         Assertions.assertEquals("DEVOS", menu.getTitle());
         Assertions.assertEquals("Menu de prueba", menu.getDescription());
+    }
+
+    @Test
+    void toDomain_MapsUpdateRequestFieldsWithGivenId() {
+        UUID id = UUID.randomUUID();
+        MenuUpdateRequestDTO request = new MenuUpdateRequestDTO("New title", "New description");
+
+        Menu menu = this.mapper.toDomain(id, request);
+
+        Assertions.assertEquals(id, menu.getId());
+        Assertions.assertEquals("New title", menu.getTitle());
+        Assertions.assertEquals("New description", menu.getDescription());
     }
 }
