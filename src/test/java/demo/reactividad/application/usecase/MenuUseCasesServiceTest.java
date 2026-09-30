@@ -19,8 +19,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import demo.reactividad.application.port.out.FoodTypeRepositoryPort;
 import demo.reactividad.application.port.out.ImageStoragePort;
 import demo.reactividad.application.port.out.MenuEventPublisher;
@@ -84,12 +89,25 @@ class MenuUseCasesServiceTest {
         when(this.imageStoragePort.generatePresignedUrl(MENU_ID.toString(), Duration.ofMinutes(15)))
                 .thenReturn(Mono.just(presignedUrl));
 
-        this.menuUseCasesService.getMenu(MENU_ID)
-                .as(StepVerifier::create)
-                .assertNext(result ->
-                        org.junit.jupiter.api.Assertions.assertEquals(presignedUrl, result.getImageUrl()))
-                .expectComplete()
-                .verify();
+        Logger logger = (Logger) LoggerFactory.getLogger(MenuUseCasesService.class);
+        ListAppender<ILoggingEvent> logAppender = new ListAppender<>();
+        logAppender.start();
+        logger.addAppender(logAppender);
+        try {
+            this.menuUseCasesService.getMenu(MENU_ID)
+                    .as(StepVerifier::create)
+                    .assertNext(result ->
+                            org.junit.jupiter.api.Assertions.assertEquals(presignedUrl, result.getImageUrl()))
+                    .expectComplete()
+                    .verify();
+
+            boolean loggedAnError = logAppender.list.stream()
+                    .anyMatch(event -> event.getLevel() == Level.ERROR);
+            org.junit.jupiter.api.Assertions.assertFalse(loggedAnError,
+                    "No debería haberse logueado ningun error en el camino feliz del presigned URL");
+        } finally {
+            logger.detachAppender(logAppender);
+        }
     }
 
     @Test
