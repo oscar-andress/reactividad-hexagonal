@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import demo.reactividad.application.port.in.MenuUseCases;
 import demo.reactividad.application.port.out.FoodTypeRepositoryPort;
 import demo.reactividad.application.port.out.ImageStoragePort;
+import demo.reactividad.application.port.out.MenuBatchFailurePolicy;
 import demo.reactividad.application.port.out.MenuEventPublisher;
 import demo.reactividad.application.port.out.MenuRepositoryPort;
 import demo.reactividad.domain.exception.MenuCodeException;
@@ -28,11 +29,14 @@ import reactor.core.publisher.Mono;
 public class MenuUseCasesService implements MenuUseCases {
 
     private static final Duration IMAGE_URL_EXPIRATION = Duration.ofMinutes(15);
+    private static final int CREATE_MENUS_BATCH_SIZE = 500;
+    private static final int CREATE_MENUS_BATCH_SAVE_CONCURRENCY = 8;
 
     private final MenuRepositoryPort menuRepositoryPort;
     private final FoodTypeRepositoryPort foodTypeRepositoryPort;
     private final MenuEventPublisher menuEventPublisher;
     private final ImageStoragePort imageStoragePort;
+    private final MenuBatchFailurePolicy menuBatchFailurePolicy;
 
     @Override
     @Transactional(readOnly = true)
@@ -42,10 +46,7 @@ public class MenuUseCasesService implements MenuUseCases {
                         MenuCodeException.NOT_FOUND.name())))
                 .flatMap(menu -> this.foodTypeRepositoryPort.findFoodTypeByMenuId(menuId)
                         .collect(Collectors.toSet())
-                        .map(foodTypes -> {
-                            menu.setFoodTypes(foodTypes);
-                            return menu;
-                        }))
+                        .map(menu::withFoodTypes))
                 .flatMap(this::withPresignedImageUrlSafely);
     }
 
@@ -54,10 +55,7 @@ public class MenuUseCasesService implements MenuUseCases {
             return Mono.just(menu);
         }
         return this.imageStoragePort.generatePresignedUrl(menu.getImageKey(), IMAGE_URL_EXPIRATION)
-                .map(presignedUrl -> {
-                    menu.setImageUrl(presignedUrl);
-                    return menu;
-                });
+                .map(menu::withImageUrl);
     }
 
     @Override
@@ -84,12 +82,10 @@ public class MenuUseCasesService implements MenuUseCases {
     public Flux<Menu> createMenus(Flux<Menu> menus) {
         return menus
                 .doOnNext(menu -> log.info("Recieved {}", menu))
-                .buffer(500)
+                .buffer(CREATE_MENUS_BATCH_SIZE)
                 .flatMap(batch -> this.menuRepositoryPort.saveAll(batch)
-                        .onErrorResume(error -> {
-                            log.error("Error saving menus list: {}", batch);
-                            return Flux.empty();
-                        }))
+                        .onErrorResume(error -> this.menuBatchFailurePolicy.onBatchFailure(batch, error)),
+                        CREATE_MENUS_BATCH_SAVE_CONCURRENCY)
                 .delayElements(Duration.ofSeconds(2));
     }
 
@@ -130,8 +126,7 @@ public class MenuUseCasesService implements MenuUseCases {
 
     private Mono<Menu> uploadAndTagImage(Menu menu, UUID menuId, byte[] imageContent, String contentType) {
         return this.imageStoragePort.upload(menuId.toString(), imageContent, contentType)
-                .doOnSuccess(unused -> menu.setImageKey(menuId.toString()))
-                .thenReturn(menu);
+                .thenReturn(menu.withImageKey(menuId.toString()));
     }
 
     private Mono<Menu> saveWithImageCompensation(Menu menu) {

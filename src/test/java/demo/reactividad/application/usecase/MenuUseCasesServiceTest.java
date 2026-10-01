@@ -12,6 +12,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,7 @@ import org.springframework.dao.OptimisticLockingFailureException;
 
 import demo.reactividad.application.port.out.FoodTypeRepositoryPort;
 import demo.reactividad.application.port.out.ImageStoragePort;
+import demo.reactividad.application.port.out.MenuBatchFailurePolicy;
 import demo.reactividad.application.port.out.MenuEventPublisher;
 import demo.reactividad.application.port.out.MenuRepositoryPort;
 import demo.reactividad.domain.exception.MenuNotFoundException;
@@ -50,12 +53,16 @@ class MenuUseCasesServiceTest {
     @Mock
     private ImageStoragePort imageStoragePort;
 
+    @Mock
+    private MenuBatchFailurePolicy menuBatchFailurePolicy;
+
     private MenuUseCasesService menuUseCasesService;
 
     @BeforeEach
     void setUp() {
         this.menuUseCasesService = new MenuUseCasesService(
-                this.menuRepositoryPort, this.foodTypeRepositoryPort, this.menuEventPublisher, this.imageStoragePort);
+                this.menuRepositoryPort, this.foodTypeRepositoryPort, this.menuEventPublisher, this.imageStoragePort,
+                this.menuBatchFailurePolicy);
     }
 
     @Test
@@ -157,10 +164,11 @@ class MenuUseCasesServiceTest {
     }
 
     @Test
-    void createMenus_SavesInBatchesAndSwallowsBatchErrors() {
+    void createMenus_WhenBatchSaveFails_DelegatesToFailurePolicyInsteadOfSwallowingSilently() {
         Menu menu = aMenu().build();
-        when(this.menuRepositoryPort.saveAll(List.of(menu)))
-                .thenReturn(Flux.error(new RuntimeException("db down")));
+        RuntimeException saveError = new RuntimeException("db down");
+        when(this.menuRepositoryPort.saveAll(List.of(menu))).thenReturn(Flux.error(saveError));
+        when(this.menuBatchFailurePolicy.onBatchFailure(List.of(menu), saveError)).thenReturn(Flux.empty());
 
         StepVerifier.withVirtualTime(() -> this.menuUseCasesService.createMenus(Flux.just(menu)))
                 .thenAwait(Duration.ofSeconds(2))
@@ -168,7 +176,36 @@ class MenuUseCasesServiceTest {
                 .verify(Duration.ofSeconds(5));
 
         verify(this.menuRepositoryPort, times(1)).saveAll(any());
+        verify(this.menuBatchFailurePolicy, times(1)).onBatchFailure(List.of(menu), saveError);
         verify(this.menuEventPublisher, never()).publish(any());
+    }
+
+    @Test
+    void createMenus_LimitsHowManyBatchesAreSavedConcurrently() {
+        int batchSize = 500;
+        int batchCount = 9; // > 8 (el límite configurado) para forzar que la saturación sea observable
+        List<Menu> menus = IntStream.range(0, batchSize * batchCount)
+                .mapToObj(i -> aMenu().build())
+                .toList();
+
+        AtomicInteger currentConcurrency = new AtomicInteger();
+        AtomicInteger maxObservedConcurrency = new AtomicInteger();
+        when(this.menuRepositoryPort.saveAll(any())).thenAnswer(invocation -> {
+            List<Menu> batch = invocation.getArgument(0);
+            int current = currentConcurrency.incrementAndGet();
+            maxObservedConcurrency.accumulateAndGet(current, Math::max);
+            return Mono.delay(Duration.ofMillis(100))
+                    .thenMany(Flux.fromIterable(batch))
+                    .doFinally(signalType -> currentConcurrency.decrementAndGet());
+        });
+
+        StepVerifier.withVirtualTime(() -> this.menuUseCasesService.createMenus(Flux.fromIterable(menus)))
+                .thenAwait(Duration.ofSeconds(1))
+                .thenCancel()
+                .verify(Duration.ofSeconds(5));
+
+        org.junit.jupiter.api.Assertions.assertEquals(8, maxObservedConcurrency.get(),
+                "El límite de concurrencia configurado para guardar batches debería respetarse");
     }
 
     @Test
@@ -241,21 +278,44 @@ class MenuUseCasesServiceTest {
         Menu existingMenu = aMenu().withId(MENU_ID).build();
         byte[] content = "image-bytes".getBytes();
         Menu updatedMenu = aMenu().withId(MENU_ID).withImageKey(MENU_ID.toString()).build();
+        String presignedUrl = "http://localhost:4566/imagenes-menu/" + MENU_ID;
 
         when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(existingMenu));
         when(this.imageStoragePort.upload(MENU_ID.toString(), content, "image/png")).thenReturn(Mono.empty());
-        when(this.menuRepositoryPort.save(existingMenu)).thenReturn(Mono.just(updatedMenu));
+        when(this.menuRepositoryPort.save(any(Menu.class))).thenReturn(Mono.just(updatedMenu));
         when(this.imageStoragePort.generatePresignedUrl(MENU_ID.toString(), Duration.ofMinutes(15)))
-                .thenReturn(Mono.just("http://localhost:4566/imagenes-menu/" + MENU_ID));
+                .thenReturn(Mono.just(presignedUrl));
 
         this.menuUseCasesService.uploadMenuImage(MENU_ID, content, "image/png")
                 .as(StepVerifier::create)
-                .expectNext(updatedMenu)
+                .assertNext(result -> {
+                    org.junit.jupiter.api.Assertions.assertEquals(MENU_ID.toString(), result.getImageKey());
+                    org.junit.jupiter.api.Assertions.assertEquals(presignedUrl, result.getImageUrl());
+                })
                 .expectComplete()
                 .verify();
 
-        org.junit.jupiter.api.Assertions.assertEquals(MENU_ID.toString(), existingMenu.getImageKey());
-        verify(this.menuEventPublisher, times(1)).publish(updatedMenu);
+        ArgumentCaptor<Menu> savedArgumentCaptor = ArgumentCaptor.forClass(Menu.class);
+        verify(this.menuRepositoryPort).save(savedArgumentCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(MENU_ID.toString(), savedArgumentCaptor.getValue().getImageKey());
+        verify(this.menuEventPublisher, times(1)).publish(any(Menu.class));
+    }
+
+    @Test
+    void uploadMenuImage_WhenSaveFailsWithOptimisticLock_MapsToMenuUnavailableException() {
+        Menu existingMenu = aMenu().withId(MENU_ID).build();
+        byte[] content = "image-bytes".getBytes();
+
+        when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(existingMenu));
+        when(this.imageStoragePort.upload(MENU_ID.toString(), content, "image/png")).thenReturn(Mono.empty());
+        when(this.menuRepositoryPort.save(any(Menu.class)))
+                .thenReturn(Mono.error(new OptimisticLockingFailureException("stale version")));
+        when(this.imageStoragePort.delete(MENU_ID.toString())).thenReturn(Mono.empty());
+
+        this.menuUseCasesService.uploadMenuImage(MENU_ID, content, "image/png")
+                .as(StepVerifier::create)
+                .expectError(MenuUnavailableException.class)
+                .verify();
     }
 
     @Test
@@ -279,7 +339,7 @@ class MenuUseCasesServiceTest {
 
         when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(existingMenu));
         when(this.imageStoragePort.upload(MENU_ID.toString(), content, "image/png")).thenReturn(Mono.empty());
-        when(this.menuRepositoryPort.save(existingMenu)).thenReturn(Mono.error(saveError));
+        when(this.menuRepositoryPort.save(any(Menu.class))).thenReturn(Mono.error(saveError));
         when(this.imageStoragePort.delete(MENU_ID.toString())).thenReturn(Mono.empty());
 
         this.menuUseCasesService.uploadMenuImage(MENU_ID, content, "image/png")
@@ -299,7 +359,7 @@ class MenuUseCasesServiceTest {
 
         when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(existingMenu));
         when(this.imageStoragePort.upload(MENU_ID.toString(), content, "image/png")).thenReturn(Mono.empty());
-        when(this.menuRepositoryPort.save(existingMenu)).thenReturn(Mono.error(saveError));
+        when(this.menuRepositoryPort.save(any(Menu.class))).thenReturn(Mono.error(saveError));
         when(this.imageStoragePort.delete(MENU_ID.toString())).thenReturn(Mono.error(deleteError));
 
         this.menuUseCasesService.uploadMenuImage(MENU_ID, content, "image/png")

@@ -34,7 +34,7 @@ Lo que agregamos hoy es más específico: no solo "¿pasaron?", sino "¿qué tan
 |---|---|---|
 | **¿Pasaron los tests?** | Un test rompe → build rojo | Surefire/Failsafe (gratis, ya lo tenías) |
 | **Cobertura de líneas/branches** | "el 90% del código de `domain` fue ejecutado por un test" | JaCoCo (lo que armamos hoy) |
-| **Calidad de los tests (no solo cantidad)** | "si le meto un bug a propósito al código, ¿algún test lo detecta?" | PIT / mutation testing (nuestro próximo punto del roadmap) |
+| **Calidad de los tests (no solo cantidad)** | "si le meto un bug a propósito al código, ¿algún test lo detecta?" | PIT / mutation testing (ver `docs/mutation-testing.md`) |
 | **Código duplicado** | "este bloque de 20 líneas está copiado en 3 archivos" | SonarQube, PMD |
 | **Complejidad excesiva** | "este método tiene 15 caminos posibles (if/else anidados) — difícil de entender y de testear" | SonarQube, Checkstyle |
 | **Vulnerabilidades de seguridad** | "estás usando una librería con un CVE conocido" | OWASP Dependency-Check, Snyk |
@@ -235,7 +235,7 @@ Lo confirmamos corriendo Maven en modo debug (`mvn -X test`) y leyendo el log re
 
 Al buscar qué test deshabilitar para forzar el fallo, encontramos que deshabilitar `updateMenu_Success_...` (un test que sí hace aserciones detalladas sobre los valores devueltos) **no cambiaba ni una sola línea de cobertura** — porque otro test (`updateMenu_WhenSaveFailsWithOptimisticLock_...`) pasa por exactamente las mismas líneas de código, solo que sin revisar los valores resultantes. La línea "se ejecutó", pero nadie comprobó que el resultado fuera el correcto.
 
-Esto es la motivación directa del próximo ejercicio (mutation testing con PIT): la cobertura de línea mide si el código *corrió*, no si los tests realmente *detectarían un bug*.
+Esto es la motivación directa del siguiente ejercicio — mutation testing con PIT, documentado en `docs/mutation-testing.md` — porque la cobertura de línea mide si el código *corrió*, no si los tests realmente *detectarían un bug*.
 
 ### Glosario corto
 

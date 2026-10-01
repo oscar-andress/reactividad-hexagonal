@@ -60,10 +60,7 @@ public final class MenuTestDataBuilder {
     }
 
     public Menu build() {
-        Menu menu = new Menu(this.id, this.title, this.description, this.createdAt);
-        menu.setVersion(this.version);
-        menu.setImageKey(this.imageKey);
-        menu.setFoodTypes(this.foodTypes);
-        return menu;
+        return new Menu(this.id, this.title, this.description, this.createdAt,
+                this.version, this.imageKey, null, this.foodTypes);
     }
 }

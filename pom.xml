@@ -274,6 +274,41 @@
 					</execution>
 				</executions>
 			</plugin>
+			<plugin>
+				<groupId>org.pitest</groupId>
+				<artifactId>pitest-maven</artifactId>
+				<version>1.17.0</version>
+				<dependencies>
+					<dependency>
+						<groupId>org.pitest</groupId>
+						<artifactId>pitest-junit5-plugin</artifactId>
+						<version>1.2.1</version>
+						<exclusions>
+							<exclusion>
+								<groupId>org.junit.platform</groupId>
+								<artifactId>junit-platform-launcher</artifactId>
+							</exclusion>
+							<exclusion>
+								<groupId>org.junit.platform</groupId>
+								<artifactId>junit-platform-engine</artifactId>
+							</exclusion>
+						</exclusions>
+					</dependency>
+				</dependencies>
+				<configuration>
+					<targetClasses>
+						<param>demo.reactividad.domain.*</param>
+						<param>demo.reactividad.application.*</param>
+					</targetClasses>
+					<targetTests>
+						<param>demo.reactividad.domain.*</param>
+						<param>demo.reactividad.application.*</param>
+					</targetTests>
+					<outputFormats>
+						<outputFormat>HTML</outputFormat>
+					</outputFormats>
+				</configuration>
+			</plugin>
 		</plugins>
 	</build>
 
