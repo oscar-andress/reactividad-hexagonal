@@ -189,6 +189,29 @@ class MenuExceptionTest {
 
 **Resultado verificado:** el mutante pasó de `NO_COVERAGE` a `KILLED` por `MenuExceptionTest`. Mutation score general: 94% → **97%**.
 
+## Cierre del parche: la causa raíz se arregló en Gap E
+
+La sección anterior ("La causa raíz vs. el parche que aplicamos hoy") dejaba explícito que el `ListAppender` era un parche dirigido, no la solución de fondo — la solución real era hacer `Menu` inmutable, planeada para el Gap E. Al llegar a ese punto del roadmap, se hizo el refactor (ver `docs/immutability.md`) y se volvió a correr PIT **sin el `ListAppender`** para comprobar si de verdad ya no hacía falta:
+
+```java
+// Antes (Menu mutable):
+.map(presignedUrl -> {
+    menu.setImageUrl(presignedUrl);
+    return menu;
+});
+
+// Después (Menu inmutable):
+.map(menu::withImageUrl);
+```
+
+Con `withImageUrl` devolviendo una instancia **nueva**, el mutante `return null` ya no tiene ningún efecto secundario previo que "tape" el bug: si PIT lo muta, `.onErrorReturn(menu)` devuelve la referencia **original y sin URL**, que un test funcional simple (comparar `result.getImageUrl()` contra lo esperado) detecta sin necesidad de inspeccionar logs.
+
+**Resultado verificado:** con el código inmutable, el mutante murió sin el `ListAppender`. Se quitó esa verificación de logs del test `getMenu_WhenMenuHasImage_ReturnsPresignedUrl` (ya era redundante, y CLAUDE.md pide evitar código no solicitado) dejando solo la aserción funcional.
+
+**Bonus:** esa misma corrida de PIT encontró un segundo mutante `NO_COVERAGE`, nuevo y real — nadie probaba el camino de conflicto optimista (`OptimisticLockingFailureException`) para `uploadMenuImage` (sí existía para `updateMenu`). Se cerró con `uploadMenuImage_WhenSaveFailsWithOptimisticLock_MapsToMenuUnavailableException`, mismo patrón que el test análogo de `updateMenu`.
+
+Mutation score final: **100%** (33/33 mutantes muertos, 0 sin cobertura) — sin ningún parche de logs, solo con el código de producción correcto y los tests que le faltaban.
+
 ## Glosario corto
 
 - **Mutante**: una copia del código de producción con un bug metido a propósito y mecánico (ej. `+` → `-`, `return x` → `return null`).

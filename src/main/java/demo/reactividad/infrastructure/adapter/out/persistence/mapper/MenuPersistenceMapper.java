@@ -1,5 +1,7 @@
 package demo.reactividad.infrastructure.adapter.out.persistence.mapper;
 
+import java.util.Set;
+
 import org.springframework.stereotype.Component;
 
 import demo.reactividad.domain.model.Menu;
@@ -9,10 +11,8 @@ import demo.reactividad.infrastructure.adapter.out.persistence.entity.MenuEntity
 public class MenuPersistenceMapper {
 
     public Menu toDomain(MenuEntity entity) {
-        Menu menu = new Menu(entity.getId(), entity.getTitle(), entity.getDescription(), entity.getCreatedAt());
-        menu.setVersion(entity.getVersion());
-        menu.setImageKey(entity.getImageKey());
-        return menu;
+        return new Menu(entity.getId(), entity.getTitle(), entity.getDescription(), entity.getCreatedAt(),
+                entity.getVersion(), entity.getImageKey(), null, Set.of());
     }
 
     public MenuEntity toEntity(Menu menu) {
