@@ -206,6 +206,8 @@
 							<includes>
 								<include>demo/reactividad/domain/**</include>
 								<include>demo/reactividad/application/**</include>
+								<include>demo/reactividad/orders/domain/**</include>
+								<include>demo/reactividad/orders/application/**</include>
 							</includes>
 							<rules>
 								<rule>
@@ -299,10 +301,14 @@
 					<targetClasses>
 						<param>demo.reactividad.domain.*</param>
 						<param>demo.reactividad.application.*</param>
+						<param>demo.reactividad.orders.domain.*</param>
+						<param>demo.reactividad.orders.application.*</param>
 					</targetClasses>
 					<targetTests>
 						<param>demo.reactividad.domain.*</param>
 						<param>demo.reactividad.application.*</param>
+						<param>demo.reactividad.orders.domain.*</param>
+						<param>demo.reactividad.orders.application.*</param>
 					</targetTests>
 					<outputFormats>
 						<outputFormat>HTML</outputFormat>

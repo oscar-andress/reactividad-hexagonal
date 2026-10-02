@@ -27,3 +27,12 @@ create table tbl_menu_food_type(
     CONSTRAINT tbl_menu_food_type_fk_menu_id foreign key (menu_id) references tbl_menu(menu_id),
     CONSTRAINT tbl_menu_food_type_fk_food_type_id foreign key (food_type_id) references tbl_food_type(food_type_id)
 );
+
+-- tbl_order (bounded context "orders" — sin FK hacia tbl_menu a propósito, ver docs/adr/)
+create table tbl_order(
+    order_id uuid default gen_random_uuid(),
+    menu_id uuid not null,
+    order_quantity integer not null,
+    order_created_at timestamp default current_timestamp not null,
+    CONSTRAINT tbl_order_pk primary key (order_id)
+);
