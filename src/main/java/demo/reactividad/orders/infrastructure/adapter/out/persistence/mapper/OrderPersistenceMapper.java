@@ -10,10 +10,12 @@ import demo.reactividad.orders.infrastructure.adapter.out.persistence.entity.Ord
 public class OrderPersistenceMapper {
 
     public Order toDomain(OrderEntity entity) {
-        return new Order(entity.getId(), new MenuId(entity.getMenuId()), entity.getQuantity(), entity.getCreatedAt());
+        return new Order(entity.getId(), new MenuId(entity.getMenuId()), entity.getMenuTitleSnapshot(),
+                entity.getQuantity(), entity.getCreatedAt());
     }
 
     public OrderEntity toEntity(Order order) {
-        return new OrderEntity(order.getId(), order.getMenuId().value(), order.getQuantity(), order.getCreatedAt());
+        return new OrderEntity(order.getId(), order.getMenuId().value(), order.getMenuTitleSnapshot(),
+                order.getQuantity(), order.getCreatedAt());
     }
 }

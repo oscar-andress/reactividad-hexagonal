@@ -1,6 +1,6 @@
-# Límites de dominio: el bounded context `Orders` (Gap A, ejercicio 1)
+# Límites de dominio: el bounded context `Orders` (Gap A completo)
 
-Este doc cubre el ejercicio 1 del Gap A del roadmap (`C:\Users\oscar.vega\.claude\plans\parsed-kindling-pixel.md`): levantar un segundo bounded context (`Orders`) con su propio vertical slice (dominio → aplicación → persistencia), como terreno real para practicar límites de dominio en los ejercicios siguientes (anti-corruption layer, ADR, SSE propio). Sigue la misma estructura que el resto de `docs/`.
+Este doc cubre los 4 ejercicios del Gap A del roadmap (`C:\Users\oscar.vega\.claude\plans\parsed-kindling-pixel.md`): levantar un segundo bounded context (`Orders`) con su propio vertical slice (dominio → aplicación → persistencia), el anti-corruption layer que lo conecta con `Menu` sin acoplarlos, el ADR que documenta esa decisión (`docs/adr/0001-orders-menu-boundary.md`), y el vertical slice completo con su propio endpoint HTTP + SSE. Sigue la misma estructura que el resto de `docs/`.
 
 ## ¿Por qué un segundo contexto?
 
@@ -131,9 +131,137 @@ El `*IT` nuevo (`OrderR2dbcRepositoryIT`, que necesita Postgres real vía Testco
 
 **Queda pendiente**: correr `mvn verify` en una máquina con Docker disponible (local o CI) para confirmar que `OrderR2dbcRepositoryIT` pasa de verdad contra Postgres real.
 
-## Resultado de este ejercicio
+## Resultado del ejercicio 1
 
 - 51 tests unitarios verdes (`mvn test`), incluyendo `OrderTest`, `OrderUseCasesServiceTest`, `OrderPersistenceMapperTest`.
 - Gate estricto de JaCoCo corregido para cubrir también `orders.domain`/`orders.application` — 90% cumplido sobre 11 clases.
 - PIT: 100% (37/37 mutantes muertos), incluyendo el código nuevo.
 - `OrderR2dbcRepositoryIT` escrito pero **no verificado** (sin Docker en este entorno) — pendiente de confirmar en `mvn verify` local/CI.
+
+## Ejercicio 2: el anti-corruption layer (`MenuLookupPort`)
+
+`Orders` necesita saber el título del menú al momento de pedir — ese título se guarda como "snapshot" en el propio pedido (`Order.menuTitleSnapshot`), siguiendo un patrón real y común en e-commerce: si el menú cambia de nombre después, el pedido histórico sigue mostrando el nombre que tenía *en el momento en que se pidió*. Esta decisión (snapshot en vez de referencia viva) se tomó explícitamente, no por accidente — se decidió integrar el ACL de verdad en `createOrder` en vez de dejarlo como código aislado sin un caller real.
+
+### La forma del anti-corruption layer
+
+Tres piezas, cada una en la capa que le corresponde:
+
+```java
+// orders/domain/model/MenuSnapshot.java — el tipo "neutral" que Orders entiende
+public record MenuSnapshot(MenuId menuId, String title) {
+    public MenuSnapshot {
+        if (menuId == null) { throw new IllegalArgumentException(...); }
+        if (title == null || title.isBlank()) { throw new IllegalArgumentException(...); }
+    }
+}
+
+// orders/application/port/out/MenuLookupPort.java — el puerto que Orders.application conoce
+public interface MenuLookupPort {
+    Mono<MenuSnapshot> findMenuSnapshot(MenuId menuId);
+}
+
+// orders/infrastructure/adapter/out/menu/MenuLookupPortAdapter.java — el ACL real
+@Component
+@RequiredArgsConstructor
+public class MenuLookupPortAdapter implements MenuLookupPort {
+
+    private final MenuUseCases menuUseCases;   // sí, puede importar esto: es infraestructura
+
+    @Override
+    public Mono<MenuSnapshot> findMenuSnapshot(MenuId menuId) {
+        return this.menuUseCases.getMenu(menuId.value())
+                .map(menu -> new MenuSnapshot(menuId, menu.getTitle()))      // traduce el ÉXITO
+                .onErrorResume(MenuNotFoundException.class, error -> Mono.empty());  // traduce el FALLO
+    }
+}
+```
+
+El detalle que hace que esto sea un anti-corruption layer *de verdad*, no solo un mapper: traduce **tanto el éxito como el fallo**. Si el adaptador solo tradujera el caso feliz (`.map(...)`) y dejara pasar la excepción `MenuNotFoundException` sin tocar, esa excepción — que es un tipo de `demo.reactividad.domain.exception`, del otro contexto — llegaría hasta `OrderUseCasesService`, y ahí ya habría una fuga del dominio de `Menu` hacia `Orders`, aunque fuera "solo para capturarla". El `onErrorResume` convierte "no existe" en `Mono.empty()` — una ausencia neutral, sin tipo de `Menu` involucrado — y `OrderUseCasesService` reacciona a esa ausencia con su **propia** excepción:
+
+```java
+// orders/application/usecase/OrderUseCasesService.java
+public Mono<Order> createOrder(MenuId menuId, int quantity) {
+    return this.menuLookupPort.findMenuSnapshot(menuId)
+            .switchIfEmpty(Mono.error(() -> new MenuNotFoundForOrderException(   // excepción propia de Orders
+                    "Cannot order menu " + menuId.value() + ": it does not exist")))
+            .map(snapshot -> new Order(menuId, snapshot.title(), quantity))
+            .flatMap(this.orderRepositoryPort::save);
+}
+```
+
+### Por qué `MenuUseCases` y no `MenuRepositoryPort`
+
+El plan dejaba abierta la elección entre que el adaptador llame a `MenuRepositoryPort` (el puerto de persistencia de `Menu`) o a `MenuUseCases` (su puerto de entrada/casos de uso). Se eligió `MenuUseCases` a propósito: es el contrato público real de `Menu` — pasa por sus reglas de negocio, su manejo de errores (`MenuNotFoundException`), etc. Depender de `MenuRepositoryPort` en cambio sería saltarse la capa de aplicación de `Menu` y hablar directo con lo que es, conceptualmente, un detalle de infraestructura de *otro* contexto — funcionaría, pero rompería la encapsulación de `Menu` igual que si `Orders` leyera directamente su tabla SQL.
+
+### La regla mecánica: ArchUnit
+
+Con el ACL ya construido, se agregó la dependencia `com.tngtech.archunit:archunit` y `ArchitectureRulesTest` con 3 reglas:
+
+```java
+@Test
+void ordersDomainNeverDependsOnMenuDomainOrApplication() {
+    noClasses().that().resideInAPackage("demo.reactividad.orders.domain..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "demo.reactividad.domain..", "demo.reactividad.application..")
+            .check(ALL_CLASSES);
+}
+
+@Test
+void ordersApplicationNeverDependsOnMenuDomainOrApplication() {
+    // mismo patrón, para orders.application..
+}
+
+@Test
+void ordersNeverDependsOnMenuRepositoryPortDirectly() {
+    noClasses().that().resideInAPackage("demo.reactividad.orders..")
+            .should().dependOnClassesThat()
+            .haveFullyQualifiedName("demo.reactividad.application.port.out.MenuRepositoryPort")
+            .check(ALL_CLASSES);
+}
+```
+
+**Verificado rompiendo a propósito, no asumido:** se agregó temporalmente un campo `Menu` dentro de `OrderUseCasesService` y se corrió el test — falló señalando exactamente el campo culpable:
+
+```
+Architecture Violation [Priority: MEDIUM] - Rule 'no classes that reside in a package
+'demo.reactividad.orders.application..' should depend on classes that reside in any package
+[...]' was violated (1 times):
+Field <...OrderUseCasesService.leakedMenuReference> has type <demo.reactividad.domain.model.Menu>
+```
+
+Y lo mismo para la tercera regla: se agregó temporalmente `MenuRepositoryPort` como dependencia de `MenuLookupPortAdapter` y el test lo señaló igual de preciso. Ambos reverts confirmados, suite verde de nuevo.
+
+### El mutante que PIT encontró en `Order`
+
+Al agregar `menuTitleSnapshot`, PIT encontró un mutante `SURVIVED` real: `CONDITIONALS_BOUNDARY` cambió `quantity < MINIMUM_QUANTITY` por `quantity <= MINIMUM_QUANTITY` en el constructor de `Order`. Ningún test probaba el valor límite exacto (`quantity = 1`, que debería ser válido) — los tests existentes solo cubrían "claramente inválido" (`0`, `-1`) y "claramente válido" (`3`), dejando el límite mismo sin probar. Se agregó `constructor_WhenQuantityIsExactlyTheMinimum_DoesNotThrow` y el mutante murió.
+
+**Resultado final:** 59 tests unitarios verdes, gate estricto de JaCoCo en verde, PIT en **100%** (41/41 mutantes muertos).
+
+## Ejercicio 3: el ADR
+
+Documentado en `docs/adr/0001-orders-menu-boundary.md` — compara el diseño síncrono elegido (ejercicio 2) contra un snapshot dirigido por eventos, y documenta un bloqueo real encontrado al revisar el código (`ReactorMenuEventPublisher` usa `replay().limit(1)`, así que la alternativa por eventos no funcionaría hoy sin cambios adicionales).
+
+## Ejercicio 4: el vertical slice completo (HTTP + SSE)
+
+Último ejercicio del gap: exponer `Orders` como un recurso HTTP real, con su propio stream SSE — mismo patrón que `MenuHandler`/`MenuRouterConfig`, aplicando desde el día uno el manejo correcto de `EmitResult` (no hubo que "primero romperlo, después arreglarlo" como en el Gap E, porque ya conocíamos la forma correcta).
+
+### Las piezas nuevas
+
+- **`OrderEventPublisher`** (puerto) + **`ReactorOrderEventPublisher`** (adaptador): idéntico a `MenuEventPublisher`/`ReactorMenuEventPublisher`, con `Sinks.EmitFailureHandler.busyLooping(...)` y `failedEmissionCount` desde la primera versión.
+- **`OrderUseCasesService.createOrder`** ahora publica el pedido guardado (`.doOnNext(this.orderEventPublisher::publish)`), y gana `streamOrders()` delegando al publisher — mismo patrón que `MenuUseCasesService.createMenu`/`streamMenus`.
+- **`OrderHandler`** + **`OrderRouterConfig`**: `POST /api/v1/order/` (crea un pedido) y `GET /api/v1/order/stream` (SSE). Las rutas no necesitaron ningún cambio en los filtros de seguridad (`AuthenticationWebFilter`/`AuthorizationWebFilter` son globales, no atados a paths de `Menu`) — un `POST` requiere el token `PRIME`, un `GET` funciona con `STANDARD`, igual que en `Menu`.
+- **`OrderExceptionHandler`**: mapea `InvalidOrderException` → 400 y `MenuNotFoundForOrderException` → 404, reusando el `ErrorResponse` genérico que ya existía (no es específico de `Menu`, es una forma de respuesta de error reutilizable entre contextos).
+
+### Una decisión de diseño: `OrderExceptionHandler` propio, no reusar `GlobalExceptionHandler`
+
+El `GlobalExceptionHandler` existente está atado a `MenuException` (usa `ex.getErrorCode()`, que solo las excepciones de `Menu` tienen). Las excepciones de `Orders` (`InvalidOrderException`, `MenuNotFoundForOrderException`) se mantuvieron simples a propósito en el ejercicio 1 (sin esa ceremonia de `errorCode`, ver `docs/hexagonal-boundaries.md` ejercicio 1) — forzarlas a heredar de `MenuException` para poder reusar el handler existente hubiera sido, literalmente, acoplar `Orders` a una clase de `Menu`. Se optó por un `OrderExceptionHandler` propio, chico, que construye el código de error a mano por cada excepción — más repetición entre los dos handlers, pero cero acoplamiento entre contextos.
+
+### Verificación
+
+- `OrderUseCasesServiceTest` extendido: verifica que `createOrder` publica el evento tras guardar, y que `streamOrders()` delega al publisher.
+- `ReactorOrderEventPublisherTest`: mismo test de concurrencia que `ReactorMenuEventPublisherTest` (200 pedidos desde 16 threads). **Verificado rompiendo a propósito**: se revirtió momentáneamente a `tryEmitNext` sin manejo y se corrió el test 3 veces — **3/3 fallaron** detectando pérdida de eventos; con el fix restaurado, vuelve a pasar siempre.
+- `OrderWebMapperTest`, `OrderRouterConfigTest` (mockeando `OrderUseCases`, igual que `MenuRouterConfigTest`).
+- `OrderWebIntegrationIT`: escrito espejando exactamente `MenuWebIntegrationIT` (auth, forbidden, not-found, y el flujo SSE completo: crear un pedido y confirmar que llega por el stream). **No se pudo ejecutar en este entorno** (sin Docker) — se confirmó que compila y que el resto del suite (65 tests) sigue en verde; queda pendiente correrlo en `mvn verify` local/CI.
+- PIT: **100%** (42/42 mutantes muertos) tras agregar la lógica nueva de `createOrder`/`streamOrders`.
+
+Con esto se cierran los 4 ejercicios del Gap A (Arquitectura Hexagonal: Diseño Evolutivo y Límites de Dominio).

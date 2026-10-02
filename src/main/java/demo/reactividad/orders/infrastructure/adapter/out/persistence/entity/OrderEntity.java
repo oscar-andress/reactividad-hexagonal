@@ -28,6 +28,9 @@ public class OrderEntity {
     @Column("menu_id")
     private UUID menuId;
 
+    @Column("order_menu_title_snapshot")
+    private String menuTitleSnapshot;
+
     @Column("order_quantity")
     private int quantity;
 

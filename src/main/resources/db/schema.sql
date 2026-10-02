@@ -32,6 +32,7 @@ create table tbl_menu_food_type(
 create table tbl_order(
     order_id uuid default gen_random_uuid(),
     menu_id uuid not null,
+    order_menu_title_snapshot varchar(100) not null,
     order_quantity integer not null,
     order_created_at timestamp default current_timestamp not null,
     CONSTRAINT tbl_order_pk primary key (order_id)

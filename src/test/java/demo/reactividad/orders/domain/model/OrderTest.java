@@ -19,17 +19,31 @@ class OrderTest {
     }
 
     @Test
+    void constructor_WhenQuantityIsExactlyTheMinimum_DoesNotThrow() {
+        Order order = anOrder().withQuantity(1).build();
+
+        assertEquals(1, order.getQuantity());
+    }
+
+    @Test
     void constructor_WhenMenuIdIsNull_ThrowsInvalidOrderException() {
         assertThrows(InvalidOrderException.class, () -> anOrder().withMenuId(null).build());
+    }
+
+    @Test
+    void constructor_WhenMenuTitleSnapshotIsBlank_ThrowsInvalidOrderException() {
+        assertThrows(InvalidOrderException.class, () -> anOrder().withMenuTitleSnapshot(null).build());
+        assertThrows(InvalidOrderException.class, () -> anOrder().withMenuTitleSnapshot("  ").build());
     }
 
     @Test
     void constructor_WithValidData_CreatesOrder() {
         MenuId menuId = new MenuId(UUID.randomUUID());
 
-        Order order = anOrder().withMenuId(menuId).withQuantity(3).build();
+        Order order = anOrder().withMenuId(menuId).withMenuTitleSnapshot("Menu del dia").withQuantity(3).build();
 
         assertEquals(menuId, order.getMenuId());
+        assertEquals("Menu del dia", order.getMenuTitleSnapshot());
         assertEquals(3, order.getQuantity());
     }
 }

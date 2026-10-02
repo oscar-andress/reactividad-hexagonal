@@ -9,6 +9,7 @@ public final class OrderEntityTestDataBuilder {
 
     private UUID id;
     private UUID menuId = UUID.randomUUID();
+    private String menuTitleSnapshot = "DEVOS";
     private int quantity = 1;
     private LocalDateTime createdAt;
 
@@ -29,6 +30,11 @@ public final class OrderEntityTestDataBuilder {
         return this;
     }
 
+    public OrderEntityTestDataBuilder withMenuTitleSnapshot(String menuTitleSnapshot) {
+        this.menuTitleSnapshot = menuTitleSnapshot;
+        return this;
+    }
+
     public OrderEntityTestDataBuilder withQuantity(int quantity) {
         this.quantity = quantity;
         return this;
@@ -40,6 +46,6 @@ public final class OrderEntityTestDataBuilder {
     }
 
     public OrderEntity build() {
-        return new OrderEntity(this.id, this.menuId, this.quantity, this.createdAt);
+        return new OrderEntity(this.id, this.menuId, this.menuTitleSnapshot, this.quantity, this.createdAt);
     }
 }
