@@ -47,6 +47,24 @@
 			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
 		</dependency>
+		<!-- El starter de arriba solo trae la integración de Spring Cloud (su propio
+		     CircuitBreakerFactory funcional). Las anotaciones nativas de resilience4j
+		     (@CircuitBreaker, @Retry, @Bulkhead...) necesitan este módulo aparte, que
+		     registra los aspectos de Spring AOP que realmente las procesan. Sin esto,
+		     las anotaciones compilan pero no hacen nada (ver docs/resilience.md). -->
+		<dependency>
+			<groupId>io.github.resilience4j</groupId>
+			<artifactId>resilience4j-spring-boot3</artifactId>
+			<version>2.3.0</version>
+		</dependency>
+		<!-- Las clases @Aspect de resilience4j-spring-boot3 están anotadas con anotaciones
+		     de AspectJ (org.aspectj.lang.annotation.Aspect). Sin este jar en el classpath,
+		     Spring ni siquiera puede reconocerlas como aspectos, aunque todo lo demás esté bien. -->
+		<dependency>
+			<groupId>org.aspectj</groupId>
+			<artifactId>aspectjweaver</artifactId>
+			<version>1.9.25.1</version>
+		</dependency>
 
 		<dependency>
 			<groupId>org.projectlombok</groupId>

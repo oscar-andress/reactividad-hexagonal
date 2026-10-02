@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import demo.reactividad.application.port.out.ImageStoragePort;
 import demo.reactividad.domain.exception.ImageStorageException;
 import demo.reactividad.infrastructure.config.S3Properties;
+import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -24,11 +25,14 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 @Slf4j
 public class S3ImageStorageAdapter implements ImageStoragePort {
 
+    private static final String RESILIENCE_INSTANCE_NAME = "s3-image-storage";
+
     private final S3AsyncClient s3AsyncClient;
     private final S3Presigner s3Presigner;
     private final S3Properties s3Properties;
 
     @Override
+    @TimeLimiter(name = RESILIENCE_INSTANCE_NAME)
     public Mono<Void> upload(String key, byte[] content, String contentType) {
         PutObjectRequest request = PutObjectRequest.builder()
                 .bucket(this.s3Properties.bucketName())
@@ -58,6 +62,7 @@ public class S3ImageStorageAdapter implements ImageStoragePort {
     }
 
     @Override
+    @TimeLimiter(name = RESILIENCE_INSTANCE_NAME)
     public Mono<String> generatePresignedUrl(String key, Duration expiration) {
         return Mono.fromCallable(() -> {
                     GetObjectRequest getObjectRequest = GetObjectRequest.builder()
