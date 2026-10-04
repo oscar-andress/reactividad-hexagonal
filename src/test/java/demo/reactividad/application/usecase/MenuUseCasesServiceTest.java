@@ -32,6 +32,7 @@ import demo.reactividad.domain.exception.MenuNotFoundException;
 import demo.reactividad.domain.exception.MenuUnavailableException;
 import demo.reactividad.domain.model.FoodType;
 import demo.reactividad.domain.model.Menu;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -56,13 +57,15 @@ class MenuUseCasesServiceTest {
     @Mock
     private MenuBatchFailurePolicy menuBatchFailurePolicy;
 
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+
     private MenuUseCasesService menuUseCasesService;
 
     @BeforeEach
     void setUp() {
         this.menuUseCasesService = new MenuUseCasesService(
                 this.menuRepositoryPort, this.foodTypeRepositoryPort, this.menuEventPublisher, this.imageStoragePort,
-                this.menuBatchFailurePolicy);
+                this.menuBatchFailurePolicy, this.meterRegistry);
     }
 
     @Test
@@ -348,6 +351,12 @@ class MenuUseCasesServiceTest {
                 .verify();
 
         verify(this.imageStoragePort, times(1)).delete(MENU_ID.toString());
+        org.junit.jupiter.api.Assertions.assertEquals(1,
+                this.meterRegistry.get("menu.image.orphan_cleanup.attempts").counter().count());
+        // "failures" ni siquiera se registra hasta que algo lo incrementa por primera vez:
+        // como el delete tuvo éxito en este test, ese contador todavía no existe.
+        org.junit.jupiter.api.Assertions.assertEquals(0,
+                this.meterRegistry.find("menu.image.orphan_cleanup.failures").counters().size());
     }
 
     @Test
@@ -366,5 +375,10 @@ class MenuUseCasesServiceTest {
                 .as(StepVerifier::create)
                 .expectErrorMatches(error -> error == saveError)
                 .verify();
+
+        org.junit.jupiter.api.Assertions.assertEquals(1,
+                this.meterRegistry.get("menu.image.orphan_cleanup.attempts").counter().count());
+        org.junit.jupiter.api.Assertions.assertEquals(1,
+                this.meterRegistry.get("menu.image.orphan_cleanup.failures").counter().count());
     }
 }

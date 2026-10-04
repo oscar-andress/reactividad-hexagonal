@@ -18,6 +18,7 @@ import demo.reactividad.domain.exception.MenuCodeException;
 import demo.reactividad.domain.exception.MenuNotFoundException;
 import demo.reactividad.domain.exception.MenuUnavailableException;
 import demo.reactividad.domain.model.Menu;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -31,12 +32,15 @@ public class MenuUseCasesService implements MenuUseCases {
     private static final Duration IMAGE_URL_EXPIRATION = Duration.ofMinutes(15);
     private static final int CREATE_MENUS_BATCH_SIZE = 500;
     private static final int CREATE_MENUS_BATCH_SAVE_CONCURRENCY = 8;
+    private static final String ORPHANED_IMAGE_CLEANUP_ATTEMPTS_METRIC = "menu.image.orphan_cleanup.attempts";
+    private static final String ORPHANED_IMAGE_CLEANUP_FAILURES_METRIC = "menu.image.orphan_cleanup.failures";
 
     private final MenuRepositoryPort menuRepositoryPort;
     private final FoodTypeRepositoryPort foodTypeRepositoryPort;
     private final MenuEventPublisher menuEventPublisher;
     private final ImageStoragePort imageStoragePort;
     private final MenuBatchFailurePolicy menuBatchFailurePolicy;
+    private final MeterRegistry meterRegistry;
 
     @Override
     @Transactional(readOnly = true)
@@ -136,8 +140,10 @@ public class MenuUseCasesService implements MenuUseCases {
     }
 
     private Mono<Void> compensateImageUpload(String imageKey) {
+        this.meterRegistry.counter(ORPHANED_IMAGE_CLEANUP_ATTEMPTS_METRIC).increment();
         return this.imageStoragePort.delete(imageKey)
                 .onErrorResume(deleteError -> {
+                    this.meterRegistry.counter(ORPHANED_IMAGE_CLEANUP_FAILURES_METRIC).increment();
                     log.error("Failed to delete orphaned image {} after a failed save", imageKey, deleteError);
                     return Mono.empty();
                 });
