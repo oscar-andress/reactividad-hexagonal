@@ -105,6 +105,23 @@ class MenuWebIntegrationIT extends AbstractPostgresContainerTest {
     }
 
     @Test
+    void postMenu_WhenTitleIsBlank_ReturnsBadRequestWithStructuredError() {
+        MenuCreateRequestDTO menu = new MenuCreateRequestDTO("  ", "Test description");
+
+        this.webTestClient.post()
+                .uri(MENU_PATH + "/")
+                .header(AUTH_HEADER, PRIME_TOKEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(menu)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectHeader().contentType(MediaType.APPLICATION_JSON)
+                .expectBody()
+                .consumeWith(r -> log.info("{}", new String(r.getResponseBody(), StandardCharsets.UTF_8)))
+                .jsonPath("$.errorCode").isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
     void putMenu_Success() {
         MenuUpdateRequestDTO menu = new MenuUpdateRequestDTO("Updated title", "Updated description");
 

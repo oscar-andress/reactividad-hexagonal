@@ -14,6 +14,7 @@ import demo.reactividad.infrastructure.adapter.in.web.dto.request.MenuUpdateRequ
 import demo.reactividad.infrastructure.adapter.in.web.dto.response.MenuResponseDTO;
 import demo.reactividad.infrastructure.adapter.in.web.mapper.MenuWebMapper;
 import demo.reactividad.infrastructure.adapter.in.web.multipart.MultipartFilePartExtractor;
+import demo.reactividad.infrastructure.adapter.in.web.validation.RequestValidator;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -27,6 +28,7 @@ public class MenuHandler {
     private final MenuUseCases menuUseCases;
     private final MenuWebMapper menuWebMapper;
     private final MultipartFilePartExtractor multipartFilePartExtractor;
+    private final RequestValidator requestValidator;
 
     public Mono<ServerResponse> getMenu(ServerRequest request) {
         UUID menuId = UUID.fromString(request.pathVariable("menuId"));
@@ -37,6 +39,7 @@ public class MenuHandler {
 
     public Mono<ServerResponse> createMenu(ServerRequest request) {
         return request.bodyToMono(MenuCreateRequestDTO.class)
+                .flatMap(this.requestValidator::validate)
                 .map(this.menuWebMapper::toDomain)
                 .flatMap(this.menuUseCases::createMenu)
                 .map(this.menuWebMapper::toResponseDTO)
@@ -68,6 +71,7 @@ public class MenuHandler {
     public Mono<ServerResponse> updateMenu(ServerRequest request) {
         UUID menuId = UUID.fromString(request.pathVariable("menuId"));
         return request.bodyToMono(MenuUpdateRequestDTO.class)
+                      .flatMap(this.requestValidator::validate)
                       .map(dto -> this.menuWebMapper.toDomain(menuId, dto))
                       .flatMap(this.menuUseCases::updateMenu)
                       .map(this.menuWebMapper::toResponseDTO)

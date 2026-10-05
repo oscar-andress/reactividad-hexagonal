@@ -1,6 +1,8 @@
 package demo.reactividad.infrastructure.adapter.in.web.exception;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -11,12 +13,14 @@ import demo.reactividad.domain.exception.ImageStorageException;
 import demo.reactividad.domain.exception.MenuException;
 import demo.reactividad.domain.exception.MenuNotFoundException;
 import demo.reactividad.domain.exception.MenuUnavailableException;
+import jakarta.validation.ConstraintViolationException;
 import reactor.core.publisher.Mono;
 
 @Component
 public class GlobalExceptionHandler {
 
     private static final String IMAGE_STORAGE_FAILED_CODE = "IMAGE_STORAGE_FAILED";
+    private static final String VALIDATION_FAILED_CODE = "VALIDATION_FAILED";
 
     public Mono<ServerResponse> handleMenuUnavailableException(MenuUnavailableException ex, ServerRequest request) {
         return buildResponse(ex, request, HttpStatus.CONFLICT);
@@ -28,6 +32,15 @@ public class GlobalExceptionHandler {
 
     public Mono<ServerResponse> handleImageStorageException(ImageStorageException ex, ServerRequest request) {
         return buildResponse(ex.getMessage(), IMAGE_STORAGE_FAILED_CODE, request, HttpStatus.BAD_GATEWAY);
+    }
+
+    public Mono<ServerResponse> handleConstraintViolationException(
+            ConstraintViolationException ex, ServerRequest request) {
+        String message = ex.getConstraintViolations().stream()
+                .sorted(Comparator.comparing(violation -> violation.getPropertyPath().toString()))
+                .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                .collect(Collectors.joining(", "));
+        return buildResponse(message, VALIDATION_FAILED_CODE, request, HttpStatus.BAD_REQUEST);
     }
 
     private Mono<ServerResponse> buildResponse(MenuException ex, ServerRequest request, HttpStatus status) {
