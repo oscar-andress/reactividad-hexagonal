@@ -94,3 +94,68 @@ class MenuRateLimiterTest {
 | **No necesita proxy AOP** (P2 = no) | `MenuUseCasesServiceTest`: Mockito plano, `@Mock` sobre `MenuRepositoryPort`/`ImageStoragePort` | `JwtTokenServiceTest`, `AuthenticationWebFilterTest`, `LoggingMenuBatchFailurePolicyTest`: `new X(...)` directo, sin mocks |
 
 Cada celda responde una pregunta distinta — por eso conviene decidirlas en el orden de arriba, en vez de elegir "el patrón de test que usamos la última vez" sin volver a pensar cuál pregunta aplica en este caso puntual.
+
+## ¿Qué es un "fixture"?
+
+Antes de la cuarta preocupación, vale la pena definir un término que ya aparece en el código (`testsupport/fixtures/`) y que se usa sin explicar: un **fixture** es el estado conocido y repetible que un test necesita como punto de partida — los datos o el contexto que preparás *antes* de ejercitar el código que realmente querés probar. El nombre viene de "fijar" un estado conocido: un test no debería depender de "lo que haya quedado dando vueltas" — necesita arrancar siempre desde el mismo punto, para ser repetible y confiable.
+
+Dos sentidos del término, relacionados entre sí:
+
+**1. Fixture como datos reutilizables** (el sentido que usa la carpeta `testsupport/fixtures/` de este proyecto):
+
+```java
+// MenuTestDataBuilder.java — vive en testsupport/fixtures/
+public static MenuTestDataBuilder aMenu() {
+    return new MenuTestDataBuilder();   // "DEVOS", "Menu de prueba", por defecto
+}
+```
+
+`aMenu().build()` da un `Menu` válido y conocido, sin que el test tenga que inventar desde cero "¿qué campos necesita un Menu válido?".
+
+**2. Fixture como el *proceso* de preparar ese estado** (el sentido clásico de los frameworks xUnit — JUnit, etc.):
+
+```java
+// MenuWebIntegrationIT.java
+@BeforeEach
+void setUp() {
+    this.standardToken = this.jwtTokenService.generate(AuthenticationCategory.STANDARD);
+    this.primeToken = this.jwtTokenService.generate(AuthenticationCategory.PRIME);
+    this.existingMenu = this.menuR2dbcRepository.deleteAll()
+            .then(this.menuR2dbcRepository.save(aMenuEntity().build()))
+            .block();
+}
+```
+
+Este método `@BeforeEach` (corre antes de **cada** test de la clase) es, en el sentido clásico, "armar el fixture" — deja la base de datos en un estado conocido antes de que cualquier test arranque. Un `@AfterEach` que limpiara algo después sería "desarmar el fixture".
+
+Sin fixtures, cada test tendría que decidir desde cero sus propios datos — con el riesgo real de que dos tests se pisen entre sí (estado compartido mutable), o de que un test pase "por casualidad" con datos que no representan un caso real.
+
+## Una cuarta preocupación, independiente de las tres anteriores: DRY en la construcción de datos de prueba
+
+Las tres preguntas de arriba deciden *cómo* se arma un test (contenedor sí/no, mock vs real). Hay una preocupación separada, ortogonal a esas tres: **¿estoy repitiendo el mismo literal una y otra vez al construir los datos de entrada?**
+
+Se encontró esto, real, en el código:
+
+```
+MenuWebIntegrationIT.java:106:  new MenuCreateRequestDTO("Test", "Test description")
+MenuWebIntegrationIT.java:156:  new MenuCreateRequestDTO("Test", "Test description")   // idéntico
+MenuRateLimiterTest.java:64:    new MenuCreateRequestDTO("Test", "Test description")   // idéntico otra vez
+OrderWebIntegrationIT.java:79,91: new OrderCreateRequestDTO(this.existingMenu.getId(), 1)  // idéntico
+```
+
+El proyecto ya tenía el patrón correcto para esto — **Test Data Builder** — aplicado a los objetos de dominio (`MenuTestDataBuilder`, `OrderTestDataBuilder`) y a las entidades de persistencia (`MenuEntityTestDataBuilder`, `OrderEntityTestDataBuilder`). Lo que faltaba era extenderlo a los **DTOs de request** de la capa web, que se seguían construyendo con literales sueltos en cada test.
+
+**El fix:** `MenuCreateRequestDTOTestDataBuilder`, `MenuUpdateRequestDTOTestDataBuilder`, `OrderCreateRequestDTOTestDataBuilder` — mismo patrón ya establecido (`aMenuCreateRequestDTO()`, `withTitle(...)`, `.build()`), con valores por defecto sensatos para que el caso común sea `aMenuCreateRequestDTO().build()` sin tener que especificar nada.
+
+```java
+// Antes — el mismo literal repetido en 3 archivos distintos
+MenuCreateRequestDTO menu = new MenuCreateRequestDTO("Test", "Test description");
+
+// Después
+MenuCreateRequestDTO menu = aMenuCreateRequestDTO().build();                           // caso común, con defaults
+MenuCreateRequestDTO menu = aMenuCreateRequestDTO().withTitle("  ").build();           // solo lo que importa para ESTE test
+```
+
+Por qué importa, más allá de "menos líneas": si `MenuCreateRequestDTO` alguna vez gana un campo nuevo, con el builder se actualiza **un solo lugar**; sin él, hay que tocar cada call site a mano, con el riesgo real de olvidar alguno.
+
+**Verificado:** se corrió el suite completo (87 tests) y PIT (100%, 44/44) antes y después del refactor — mismos números exactos, confirmando que fue un cambio puramente de forma, sin tocar ningún comportamiento.
