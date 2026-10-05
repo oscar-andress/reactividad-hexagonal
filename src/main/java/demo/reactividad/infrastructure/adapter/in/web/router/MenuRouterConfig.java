@@ -15,6 +15,7 @@ import demo.reactividad.domain.exception.MenuNotFoundException;
 import demo.reactividad.domain.exception.MenuUnavailableException;
 import demo.reactividad.infrastructure.adapter.in.web.MenuHandler;
 import demo.reactividad.infrastructure.adapter.in.web.exception.GlobalExceptionHandler;
+import jakarta.validation.ConstraintViolationException;
 import lombok.RequiredArgsConstructor;
 
 @Configuration
@@ -50,6 +51,7 @@ public class MenuRouterConfig {
             .onError(MenuNotFoundException.class, this.globalExceptionHandler::handleMenuNotFoundException)
             .onError(MenuUnavailableException.class, this.globalExceptionHandler::handleMenuUnavailableException)
             .onError(ImageStorageException.class, this.globalExceptionHandler::handleImageStorageException)
+            .onError(ConstraintViolationException.class, this.globalExceptionHandler::handleConstraintViolationException)
             .build();
     }
 }
