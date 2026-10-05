@@ -16,6 +16,8 @@ import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTest
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
+import demo.reactividad.infrastructure.adapter.in.web.security.AuthenticationCategory;
+import demo.reactividad.infrastructure.adapter.in.web.security.JwtTokenService;
 import demo.reactividad.infrastructure.adapter.out.persistence.entity.MenuEntity;
 import demo.reactividad.infrastructure.adapter.out.persistence.repository.MenuR2dbcRepository;
 import demo.reactividad.orders.infrastructure.adapter.in.web.dto.request.OrderCreateRequestDTO;
@@ -29,8 +31,6 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
 
     private static final String ORDER_PATH = "/api/v1/order";
     private static final String AUTH_HEADER = "auth-token";
-    private static final String STANDARD_TOKEN = "secret123";
-    private static final String PRIME_TOKEN = "secret456";
     private static final Duration STREAM_TIMEOUT = Duration.ofSeconds(5);
     private static final Logger log = LoggerFactory.getLogger(OrderWebIntegrationIT.class);
 
@@ -40,10 +40,17 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
     @Autowired
     private MenuR2dbcRepository menuR2dbcRepository;
 
+    @Autowired
+    private JwtTokenService jwtTokenService;
+
     private MenuEntity existingMenu;
+    private String standardToken;
+    private String primeToken;
 
     @BeforeEach
     void setUp() {
+        this.standardToken = this.jwtTokenService.generate(AuthenticationCategory.STANDARD);
+        this.primeToken = this.jwtTokenService.generate(AuthenticationCategory.PRIME);
         this.existingMenu = this.menuR2dbcRepository.deleteAll()
                 .then(this.menuR2dbcRepository.save(aMenuEntity().build()))
                 .block();
@@ -55,7 +62,7 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
 
         this.webTestClient.post()
                 .uri(ORDER_PATH + "/")
-                .header(AUTH_HEADER, PRIME_TOKEN)
+                .header(AUTH_HEADER, this.primeToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(order)
                 .exchange()
@@ -85,7 +92,7 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
 
         this.webTestClient.post()
                 .uri(ORDER_PATH + "/")
-                .header(AUTH_HEADER, STANDARD_TOKEN)
+                .header(AUTH_HEADER, this.standardToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(order)
                 .exchange()
@@ -99,7 +106,7 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
 
         this.webTestClient.post()
                 .uri(ORDER_PATH + "/")
-                .header(AUTH_HEADER, PRIME_TOKEN)
+                .header(AUTH_HEADER, this.primeToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(order)
                 .exchange()
@@ -114,7 +121,7 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
 
         this.webTestClient.post()
                 .uri(ORDER_PATH + "/")
-                .header(AUTH_HEADER, PRIME_TOKEN)
+                .header(AUTH_HEADER, this.primeToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(order)
                 .exchange()
@@ -123,7 +130,7 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
         this.webTestClient
                 .get()
                 .uri(ORDER_PATH + "/stream")
-                .header(AUTH_HEADER, STANDARD_TOKEN)
+                .header(AUTH_HEADER, this.standardToken)
                 .accept(MediaType.TEXT_EVENT_STREAM)
                 .exchange()
                 .expectStatus().is2xxSuccessful()
