@@ -159,3 +159,41 @@ MenuCreateRequestDTO menu = aMenuCreateRequestDTO().withTitle("  ").build();    
 Por qué importa, más allá de "menos líneas": si `MenuCreateRequestDTO` alguna vez gana un campo nuevo, con el builder se actualiza **un solo lugar**; sin él, hay que tocar cada call site a mano, con el riesgo real de olvidar alguno.
 
 **Verificado:** se corrió el suite completo (87 tests) y PIT (100%, 44/44) antes y después del refactor — mismos números exactos, confirmando que fue un cambio puramente de forma, sin tocar ningún comportamiento.
+
+## Contract/regression pinning: qué es un "pin", cuándo aplica, y golden files
+
+Otra preocupación independiente de las cuatro anteriores — no decide *cómo* testear ni *cómo construir* datos de prueba, decide **qué tan completa** tiene que ser una comparación para proteger un contrato. Surgió al cerrar el ejercicio 3 del Gap F (ver `docs/quality-gates.md`).
+
+**¿Qué es "pinear" (pin) un contrato?**
+Fijar el valor esperado completo de una salida (una respuesta JSON, una request armada hacia un SDK externo) y compararlo por **igualdad estructural total** contra ese valor — no por aserciones parciales sobre 1 o 2 campos que "importan para este test". Un assert normal (`assertEquals("Vegano", result.foodTypes().get(0).name())`) solo protege el campo que decidiste mirar; un pin protege *toda la forma* — un campo de más, de menos, o renombrado, aunque nadie lo esté mirando a propósito, también rompe el test.
+
+**¿Cuándo vale la pena pinear un contrato? (no "por cada API")**
+Dos condiciones, ambas a la vez:
+1. Cruza un límite hacia algo que no controlás en el mismo deploy — un cliente externo que ya parseó la respuesta, o un SDK/API de un tercero al que le mandás una request.
+2. Un test de comportamiento normal no lo detectaría — el caso de uso sigue "funcionando" aunque la forma exacta cambie por debajo.
+
+Un pin cubre todos los endpoints que comparten la misma forma, no hace falta uno por ruta. En este proyecto: `MenuResponseDTO`, `OrderResponseDTO` y, el de mayor alcance, `ErrorResponse` — lo reutilizan todos los endpoints de ambos contextos cuando fallan, así que un solo pin protege la forma de error de toda la API. Los DTOs de *entrada* (`MenuCreateRequestDTO`, etc.) no entran en este criterio: ya están protegidos por Bean Validation + tests funcionales, y el riesgo de contract testing pega más fuerte en lo que *sale* del sistema (ya interpretado por alguien afuera) que en lo que entra (nosotros controlamos la forma y la rechazamos si está mal).
+
+**¿Qué es un golden file?**
+El valor de referencia contra el que se compara un pin — capturado una vez, tratado como fuente de verdad. Si la salida real se desvía del golden file, el test falla; actualizarlo para reflejar un cambio intencional es una decisión explícita (editar el archivo a mano), no un efecto secundario de tocar código de producción. El término viene de "golden master" testing, usado también para comparar salidas que no son JSON (HTML renderizado, binarios, código generado).
+
+**¿String embebido en el test, o archivo real?**
+Depende del mismo umbral que ya decide un Test Data Builder (sección anterior): con un solo caso, un string inline alcanza y evita introducir una convención nueva de carpeta sin necesidad real — así se empezó. Al llegar a varios casos del mismo patrón (en este proyecto, 3: `menu-response.json`, `order-response.json`, `error-response.json`), vale la pena la convención de archivo real en `src/test/resources/golden/`: el diff de un cambio de contrato se ve limpio como diff de archivo en un PR, en vez de escondido dentro de un diff de código Java, y un helper compartido (`GoldenFileAssertions`) evita repetir la lógica de lectura + comparación en cada test.
+
+### Por qué un golden-file interno no alcanza entre servicios desplegados independientemente: el ejemplo completo
+
+El golden-file protege contra **regresiones accidentales propias** — algo que funcionaba deja de funcionar, como efecto secundario de un cambio que, visto desde el propio equipo, parecía sano y bien testeado. Pero tiene un límite real cuando el productor y el consumidor de un contrato se despliegan por separado. El siguiente escenario (hipotético: hoy `Menu` y `Orders` viven en el mismo monolito, pero el ADR 0001 ya deja planteado un futuro donde se separan) lo muestra paso a paso.
+
+**Paso 1 — el contrato de hoy.** `Menu` expone `GET /api/v1/menu/{id}` devolviendo `{"menuId": "...", "menuTitle": "Pizza", ...}`. `Orders`, como otro servicio desplegado por su cuenta, llama a ese endpoint y guarda `response.menuTitle` como snapshot del pedido.
+
+**Paso 2 — la regresión simple (la que SÍ atrapamos hoy).** Alguien en `Menu` renombra `menuTitle` a `title` por prolijidad interna. Sus propios tests quedan en verde (todo es consistente *dentro* de `Menu`). Al desplegar, `Orders` (que no se tocó) sigue leyendo `menuTitle` → recibe `null` → guarda el pedido con el título en `null`, en producción, sin que nadie lo haya decidido. Nuestro `MenuResponseDTOTest` sí frena este caso: pinea `"menuTitle"` exacto, así que el rename rompe el build de `Menu` *antes* de deployar.
+
+**Paso 3 — el caso que el golden-file no atrapa.** `Orders` depende de algo más sutil: necesita `menuCreatedAt` **sin** offset de zona horaria (`"2026-01-15T10:30:00"`), porque su librería de parseo de fechas es estricta. `Menu` migra internamente a `OffsetDateTime` por una razón propia legítima, y el campo empieza a salir con offset (`"2026-01-15T10:30:00-05:00"`). Como el cambio es "intencional" desde el punto de vista de `Menu`, el propio equipo **edita su golden file** para que coincida — su test sigue en verde, porque son dueños del archivo y lo actualizaron a propósito. Nadie le preguntó a `Orders` si podía soportar el formato nuevo. Se despliega. `Orders` explota en producción. El golden-file no ayudó: quien decide si el cambio está "bien" es el mismo equipo que lo hizo, sin ninguna forma de saber qué necesita realmente el otro lado.
+
+**Paso 4 — cómo Contract Testing consumer-driven (Pact) resuelve justo el Paso 3:**
+1. `Orders` escribe un test **de su propio lado**, contra un mock de Pact: *"cuando llamo a `GET /menu/{id}`, espero que `menuCreatedAt` tenga este formato exacto"*. Al correrlo, Pact genera un archivo de contrato que describe, literalmente, lo que `Orders` usa de verdad — no lo que `Menu` supone.
+2. Ese archivo se publica en un lugar que ambos equipos leen (un "Pact Broker").
+3. El CI de `Menu` descarga ese contrato en cada build y corre una verificación: *¿mi respuesta real todavía cumple lo que `Orders` dice necesitar?*
+4. Cuando alguien en `Menu` cambia el formato de fecha, esa verificación **falla en el CI de `Menu`, antes de deployar** — no después, en producción.
+
+La diferencia de fondo: el contrato no lo escribió el productor adivinando — lo generó el consumidor real, probando su propio código. Por eso no puede quedar desactualizado en silencio como en el Paso 3: si `Orders` cambia lo que necesita, actualiza su propio pact; si `Menu` rompe lo que `Orders` todavía necesita, el pact lo detecta igual, sin depender de que el productor se acuerde de preguntar.

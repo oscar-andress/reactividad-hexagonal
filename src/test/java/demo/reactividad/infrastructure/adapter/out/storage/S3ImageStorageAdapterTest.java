@@ -55,8 +55,12 @@ class S3ImageStorageAdapterTest {
         this.adapter = new S3ImageStorageAdapter(this.s3AsyncClient, this.s3Presigner, s3Properties);
     }
 
+    // Contract/regression pinning (Gap F, ejercicio 3): fija los ÚNICOS 3 campos que
+    // upload() arma en el PutObjectRequest real antes de entregarlo al SDK de S3. Si
+    // alguien agrega, quita o cambia un campo del builder en el adaptador, este test
+    // lo detecta — ver docs/quality-gates.md.
     @Test
-    void upload_Success_SendsCorrectRequest() {
+    void upload_Success_PinsTheExactPutObjectRequestShapeSentToS3() {
         when(this.s3AsyncClient.putObject(any(PutObjectRequest.class), any(AsyncRequestBody.class)))
                 .thenReturn(CompletableFuture.completedFuture(PutObjectResponse.builder().build()));
 
@@ -66,9 +70,12 @@ class S3ImageStorageAdapterTest {
 
         ArgumentCaptor<PutObjectRequest> requestCaptor = ArgumentCaptor.forClass(PutObjectRequest.class);
         verify(this.s3AsyncClient).putObject(requestCaptor.capture(), any(AsyncRequestBody.class));
-        assertEquals(BUCKET_NAME, requestCaptor.getValue().bucket());
-        assertEquals("menu.png", requestCaptor.getValue().key());
-        assertEquals("image/png", requestCaptor.getValue().contentType());
+        PutObjectRequest sentRequest = requestCaptor.getValue();
+        assertEquals(BUCKET_NAME, sentRequest.bucket());
+        assertEquals("menu.png", sentRequest.key());
+        assertEquals("image/png", sentRequest.contentType());
+        assertEquals(PutObjectRequest.builder().bucket(BUCKET_NAME).key("menu.png").contentType("image/png").build(),
+                sentRequest, "El PutObjectRequest no debe tener ningún otro campo seteado además de bucket/key/contentType");
     }
 
     @Test

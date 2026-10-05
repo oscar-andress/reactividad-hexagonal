@@ -1,0 +1,7 @@
+{
+  "timestamp": "2026-01-15T10:30:00",
+  "status": 404,
+  "message": "Menu with id 11111111-1111-1111-1111-111111111111 not found",
+  "errorCode": "MENU_NOT_FOUND",
+  "path": "/api/v1/menu/11111111-1111-1111-1111-111111111111"
+}
