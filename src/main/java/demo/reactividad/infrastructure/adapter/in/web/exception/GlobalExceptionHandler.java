@@ -13,6 +13,7 @@ import demo.reactividad.domain.exception.ImageStorageException;
 import demo.reactividad.domain.exception.MenuException;
 import demo.reactividad.domain.exception.MenuNotFoundException;
 import demo.reactividad.domain.exception.MenuUnavailableException;
+import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import jakarta.validation.ConstraintViolationException;
 import reactor.core.publisher.Mono;
 
@@ -21,6 +22,7 @@ public class GlobalExceptionHandler {
 
     private static final String IMAGE_STORAGE_FAILED_CODE = "IMAGE_STORAGE_FAILED";
     private static final String VALIDATION_FAILED_CODE = "VALIDATION_FAILED";
+    private static final String RATE_LIMIT_EXCEEDED_CODE = "RATE_LIMIT_EXCEEDED";
 
     public Mono<ServerResponse> handleMenuUnavailableException(MenuUnavailableException ex, ServerRequest request) {
         return buildResponse(ex, request, HttpStatus.CONFLICT);
@@ -41,6 +43,10 @@ public class GlobalExceptionHandler {
                 .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
                 .collect(Collectors.joining(", "));
         return buildResponse(message, VALIDATION_FAILED_CODE, request, HttpStatus.BAD_REQUEST);
+    }
+
+    public Mono<ServerResponse> handleRequestNotPermitted(RequestNotPermitted ex, ServerRequest request) {
+        return buildResponse(ex.getMessage(), RATE_LIMIT_EXCEEDED_CODE, request, HttpStatus.TOO_MANY_REQUESTS);
     }
 
     private Mono<ServerResponse> buildResponse(MenuException ex, ServerRequest request, HttpStatus status) {

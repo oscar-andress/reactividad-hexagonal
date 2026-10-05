@@ -15,6 +15,7 @@ import demo.reactividad.infrastructure.adapter.in.web.dto.response.MenuResponseD
 import demo.reactividad.infrastructure.adapter.in.web.mapper.MenuWebMapper;
 import demo.reactividad.infrastructure.adapter.in.web.multipart.MultipartFilePartExtractor;
 import demo.reactividad.infrastructure.adapter.in.web.validation.RequestValidator;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -24,6 +25,8 @@ import reactor.core.publisher.Mono;
 public class MenuHandler {
 
     private static final String IMAGE_PART_NAME = "image";
+    private static final String CREATE_MENUS_BULK_RATE_LIMITER = "create-menus-bulk";
+    private static final String MENU_IMAGE_UPLOAD_RATE_LIMITER = "menu-image-upload";
 
     private final MenuUseCases menuUseCases;
     private final MenuWebMapper menuWebMapper;
@@ -59,6 +62,7 @@ public class MenuHandler {
                 .then(ServerResponse.noContent().build());
     }
 
+    @RateLimiter(name = CREATE_MENUS_BULK_RATE_LIMITER)
     public Mono<ServerResponse> create1MillionMenu(ServerRequest request) {
         Flux<MenuResponseDTO> responseFlux = this.menuUseCases.createMenus(
                         request.bodyToFlux(MenuCreateRequestDTO.class).map(this.menuWebMapper::toDomain))
@@ -78,6 +82,7 @@ public class MenuHandler {
                       .flatMap(dto -> ServerResponse.ok().bodyValue(dto));
     }
 
+    @RateLimiter(name = MENU_IMAGE_UPLOAD_RATE_LIMITER)
     public Mono<ServerResponse> uploadMenuImage(ServerRequest request) {
         UUID menuId = UUID.fromString(request.pathVariable("menuId"));
         return this.multipartFilePartExtractor.extract(request, IMAGE_PART_NAME)
