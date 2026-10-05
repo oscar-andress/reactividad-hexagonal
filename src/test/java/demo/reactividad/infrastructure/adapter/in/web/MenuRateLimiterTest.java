@@ -1,5 +1,6 @@
 package demo.reactividad.infrastructure.adapter.in.web;
 
+import static demo.reactividad.testsupport.fixtures.MenuCreateRequestDTOTestDataBuilder.aMenuCreateRequestDTO;
 import static demo.reactividad.testsupport.fixtures.MenuTestDataBuilder.aMenu;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -61,7 +62,7 @@ class MenuRateLimiterTest {
     void create1MillionMenu_WhenBurstExceedsLimit_RejectsExcessWithTooManyRequests() throws Exception {
         when(this.menuUseCases.createMenus(any())).thenReturn(Flux.empty());
         String primeToken = this.jwtTokenService.generate(AuthenticationCategory.PRIME);
-        MenuCreateRequestDTO body = new MenuCreateRequestDTO("Test", "Test description");
+        MenuCreateRequestDTO body = aMenuCreateRequestDTO().build();
 
         // resilience4j.ratelimiter.instances.create-menus-bulk.limit-for-period=5 (ver
         // application.properties) — con 6 llamadas concurrentes, al menos una debe rechazarse.

@@ -1,5 +1,6 @@
 package demo.reactividad.orders.infrastructure.adapter.in.web.router;
 
+import static demo.reactividad.orders.testsupport.fixtures.OrderCreateRequestDTOTestDataBuilder.anOrderCreateRequestDTO;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -17,7 +18,6 @@ import demo.reactividad.orders.domain.exception.MenuNotFoundForOrderException;
 import demo.reactividad.orders.domain.model.MenuId;
 import demo.reactividad.orders.domain.model.Order;
 import demo.reactividad.orders.infrastructure.adapter.in.web.OrderHandler;
-import demo.reactividad.orders.infrastructure.adapter.in.web.dto.request.OrderCreateRequestDTO;
 import demo.reactividad.orders.infrastructure.adapter.in.web.exception.OrderExceptionHandler;
 import demo.reactividad.orders.infrastructure.adapter.in.web.mapper.OrderWebMapper;
 import reactor.core.publisher.Mono;
@@ -36,7 +36,7 @@ class OrderRouterConfigTest {
 
         client.post().uri("/")
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(new OrderCreateRequestDTO(menuId, 2))
+                .bodyValue(anOrderCreateRequestDTO().withMenuId(menuId).withQuantity(2).build())
                 .exchange()
                 .expectStatus().isCreated()
                 .expectBody()
@@ -57,7 +57,7 @@ class OrderRouterConfigTest {
 
         client.post().uri("/")
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(new OrderCreateRequestDTO(menuId, 1))
+                .bodyValue(anOrderCreateRequestDTO().withMenuId(menuId).withQuantity(1).build())
                 .exchange()
                 .expectStatus().isNotFound()
                 .expectBody()

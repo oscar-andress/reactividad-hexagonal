@@ -1,6 +1,8 @@
 package demo.reactividad.infrastructure.adapter.in.web;
 
+import static demo.reactividad.testsupport.fixtures.MenuCreateRequestDTOTestDataBuilder.aMenuCreateRequestDTO;
 import static demo.reactividad.testsupport.fixtures.MenuEntityTestDataBuilder.aMenuEntity;
+import static demo.reactividad.testsupport.fixtures.MenuUpdateRequestDTOTestDataBuilder.aMenuUpdateRequestDTO;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -103,7 +105,7 @@ class MenuWebIntegrationIT extends AbstractPostgresContainerTest {
 
     @Test
     void postMenu_Success() {
-        MenuCreateRequestDTO menu = new MenuCreateRequestDTO("Test", "Test description");
+        MenuCreateRequestDTO menu = aMenuCreateRequestDTO().build();
 
         this.webTestClient.post()
                 .uri(MENU_PATH + "/")
@@ -120,7 +122,7 @@ class MenuWebIntegrationIT extends AbstractPostgresContainerTest {
 
     @Test
     void postMenu_WhenTitleIsBlank_ReturnsBadRequestWithStructuredError() {
-        MenuCreateRequestDTO menu = new MenuCreateRequestDTO("  ", "Test description");
+        MenuCreateRequestDTO menu = aMenuCreateRequestDTO().withTitle("  ").build();
 
         this.webTestClient.post()
                 .uri(MENU_PATH + "/")
@@ -137,7 +139,7 @@ class MenuWebIntegrationIT extends AbstractPostgresContainerTest {
 
     @Test
     void putMenu_Success() {
-        MenuUpdateRequestDTO menu = new MenuUpdateRequestDTO("Updated title", "Updated description");
+        MenuUpdateRequestDTO menu = aMenuUpdateRequestDTO().build();
 
         this.webTestClient.put()
                 .uri(MENU_PATH + "/{menuId}", this.existingMenu.getId())
@@ -153,7 +155,7 @@ class MenuWebIntegrationIT extends AbstractPostgresContainerTest {
 
     @Test
     void postMenu_Forbidden() {
-        MenuCreateRequestDTO menu = new MenuCreateRequestDTO("Test", "Test description");
+        MenuCreateRequestDTO menu = aMenuCreateRequestDTO().build();
 
         this.webTestClient.post()
                 .uri(MENU_PATH + "/")
@@ -167,7 +169,7 @@ class MenuWebIntegrationIT extends AbstractPostgresContainerTest {
     @Test
     void getMenuStream_Success() {
         String streamMenuTitle = "Stream menu";
-        MenuCreateRequestDTO menu = new MenuCreateRequestDTO(streamMenuTitle, "Streamed via SSE");
+        MenuCreateRequestDTO menu = aMenuCreateRequestDTO().withTitle(streamMenuTitle).withDescription("Streamed via SSE").build();
 
         this.webTestClient.post()
                 .uri(MENU_PATH + "/")
@@ -199,7 +201,7 @@ class MenuWebIntegrationIT extends AbstractPostgresContainerTest {
         // (no en secuencia) para no depender de que la máquina sea lo bastante rápida
         // como para que las 6 entren en la misma ventana de 1 segundo (ver docs/security/).
         int burstSize = 6;
-        MenuCreateRequestDTO menu = new MenuCreateRequestDTO("Burst test", "Rate limiter IT");
+        MenuCreateRequestDTO menu = aMenuCreateRequestDTO().withTitle("Burst test").withDescription("Rate limiter IT").build();
         ExecutorService executor = Executors.newFixedThreadPool(burstSize);
         try {
             List<CompletableFuture<HttpStatusCode>> futures = IntStream.range(0, burstSize)

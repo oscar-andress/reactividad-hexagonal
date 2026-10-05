@@ -1,6 +1,8 @@
 package demo.reactividad.infrastructure.adapter.in.web.mapper;
 
+import static demo.reactividad.testsupport.fixtures.MenuCreateRequestDTOTestDataBuilder.aMenuCreateRequestDTO;
 import static demo.reactividad.testsupport.fixtures.MenuTestDataBuilder.aMenu;
+import static demo.reactividad.testsupport.fixtures.MenuUpdateRequestDTOTestDataBuilder.aMenuUpdateRequestDTO;
 
 import java.time.LocalDateTime;
 import java.util.Set;
@@ -40,7 +42,7 @@ class MenuWebMapperTest {
 
     @Test
     void toDomain_MapsRequestFields() {
-        MenuCreateRequestDTO request = new MenuCreateRequestDTO("DEVOS", "Menu de prueba");
+        MenuCreateRequestDTO request = aMenuCreateRequestDTO().build();
 
         Menu menu = this.mapper.toDomain(request);
 
@@ -51,7 +53,7 @@ class MenuWebMapperTest {
     @Test
     void toDomain_MapsUpdateRequestFieldsWithGivenId() {
         UUID id = UUID.randomUUID();
-        MenuUpdateRequestDTO request = new MenuUpdateRequestDTO("New title", "New description");
+        MenuUpdateRequestDTO request = aMenuUpdateRequestDTO().withTitle("New title").withDescription("New description").build();
 
         Menu menu = this.mapper.toDomain(id, request);
 

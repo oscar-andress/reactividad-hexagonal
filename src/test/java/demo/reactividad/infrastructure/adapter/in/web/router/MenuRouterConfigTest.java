@@ -1,5 +1,6 @@
 package demo.reactividad.infrastructure.adapter.in.web.router;
 
+import static demo.reactividad.testsupport.fixtures.MenuCreateRequestDTOTestDataBuilder.aMenuCreateRequestDTO;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -16,7 +17,6 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import demo.reactividad.application.port.in.MenuUseCases;
 import demo.reactividad.domain.model.Menu;
 import demo.reactividad.infrastructure.adapter.in.web.MenuHandler;
-import demo.reactividad.infrastructure.adapter.in.web.dto.request.MenuCreateRequestDTO;
 import demo.reactividad.infrastructure.adapter.in.web.exception.GlobalExceptionHandler;
 import demo.reactividad.infrastructure.adapter.in.web.mapper.MenuWebMapper;
 import demo.reactividad.infrastructure.adapter.in.web.multipart.MultipartFilePartExtractor;
@@ -60,7 +60,7 @@ class MenuRouterConfigTest {
 
         client.post().uri("/")
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(new MenuCreateRequestDTO("  ", "Alguna descripción"))
+                .bodyValue(aMenuCreateRequestDTO().withTitle("  ").withDescription("Alguna descripción").build())
                 .exchange()
                 .expectStatus().isBadRequest()
                 .expectBody()

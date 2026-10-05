@@ -1,5 +1,6 @@
 package demo.reactividad.orders.infrastructure.adapter.in.web;
 
+import static demo.reactividad.orders.testsupport.fixtures.OrderCreateRequestDTOTestDataBuilder.anOrderCreateRequestDTO;
 import static demo.reactividad.testsupport.fixtures.MenuEntityTestDataBuilder.aMenuEntity;
 
 import java.nio.charset.StandardCharsets;
@@ -58,7 +59,7 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
 
     @Test
     void postOrder_Success() {
-        OrderCreateRequestDTO order = new OrderCreateRequestDTO(this.existingMenu.getId(), 2);
+        OrderCreateRequestDTO order = anOrderCreateRequestDTO().withMenuId(this.existingMenu.getId()).withQuantity(2).build();
 
         this.webTestClient.post()
                 .uri(ORDER_PATH + "/")
@@ -76,7 +77,7 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
 
     @Test
     void postOrder_Unauthorized() {
-        OrderCreateRequestDTO order = new OrderCreateRequestDTO(this.existingMenu.getId(), 1);
+        OrderCreateRequestDTO order = anOrderCreateRequestDTO().withMenuId(this.existingMenu.getId()).withQuantity(1).build();
 
         this.webTestClient.post()
                 .uri(ORDER_PATH + "/")
@@ -88,7 +89,7 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
 
     @Test
     void postOrder_Forbidden() {
-        OrderCreateRequestDTO order = new OrderCreateRequestDTO(this.existingMenu.getId(), 1);
+        OrderCreateRequestDTO order = anOrderCreateRequestDTO().withMenuId(this.existingMenu.getId()).withQuantity(1).build();
 
         this.webTestClient.post()
                 .uri(ORDER_PATH + "/")
@@ -102,7 +103,7 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
     @Test
     void postOrder_WhenMenuDoesNotExist_ReturnsNotFound() {
         UUID unknownMenuId = UUID.randomUUID();
-        OrderCreateRequestDTO order = new OrderCreateRequestDTO(unknownMenuId, 1);
+        OrderCreateRequestDTO order = anOrderCreateRequestDTO().withMenuId(unknownMenuId).withQuantity(1).build();
 
         this.webTestClient.post()
                 .uri(ORDER_PATH + "/")
@@ -117,7 +118,7 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
 
     @Test
     void getOrderStream_Success() {
-        OrderCreateRequestDTO order = new OrderCreateRequestDTO(this.existingMenu.getId(), 5);
+        OrderCreateRequestDTO order = anOrderCreateRequestDTO().withMenuId(this.existingMenu.getId()).withQuantity(5).build();
 
         this.webTestClient.post()
                 .uri(ORDER_PATH + "/")
