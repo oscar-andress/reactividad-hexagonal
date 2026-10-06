@@ -89,6 +89,16 @@ Este es el patrón que la propia documentación de Testcontainers recomienda exp
 | `mvn verify` (después del fix, intento 1) | **90 unitarios + 22 de integración, todos verdes** |
 | `mvn verify` (después del fix, intento 2) | Mismo resultado — estable |
 
+## El gate verificado en CI real, no solo en local
+
+Con el fix ya en una rama (`feature/ci-quality-gates`, PR #14), se usó ese mismo PR para probar que el gate de calidad (JaCoCo, no este bug puntual) de verdad frena un PR en GitHub Actions real — no solo en `mvn verify` local:
+
+| Corrida en GitHub Actions | Cambio | Resultado |
+|---|---|---|
+| [run 37470806775](https://github.com/oscar-andress/reactividad-hexagonal/actions/runs/37470806775) | Fix + workflow, sin alterar nada | ✅ verde (1m56s) |
+| [run 37471194203](https://github.com/oscar-andress/reactividad-hexagonal/actions/runs/37471194203) | Umbral de `domain`/`application` subido a propósito de 90% a 99% (real: ~92%) | ❌ rojo — falló exactamente en el paso `mvn verify` |
+| [run 37471475750](https://github.com/oscar-andress/reactividad-hexagonal/actions/runs/37471475750) | Revertido el umbral | ✅ verde de nuevo |
+
 ## Qué previene que esto se repita
 
 - **El CI de este mismo ejercicio** (`.github/workflows/ci.yml`) corre `mvn verify` en cada PR — de ahora en más, un bug de este tipo se ve en rojo antes de mergear, no se queda invisible durante meses como pasó acá.
