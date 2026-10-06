@@ -23,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.OptimisticLockingFailureException;
 
+import demo.reactividad.application.port.out.FoodTypeClassifierPort;
 import demo.reactividad.application.port.out.FoodTypeRepositoryPort;
 import demo.reactividad.application.port.out.ImageStoragePort;
 import demo.reactividad.application.port.out.MenuBatchFailurePolicy;
@@ -30,7 +31,9 @@ import demo.reactividad.application.port.out.MenuEventPublisher;
 import demo.reactividad.application.port.out.MenuRepositoryPort;
 import demo.reactividad.domain.exception.MenuNotFoundException;
 import demo.reactividad.domain.exception.MenuUnavailableException;
+import demo.reactividad.domain.exception.UnsafeAiResponseException;
 import demo.reactividad.domain.model.FoodType;
+import demo.reactividad.domain.model.FoodTypeSuggestion;
 import demo.reactividad.domain.model.Menu;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import reactor.core.publisher.Flux;
@@ -57,6 +60,9 @@ class MenuUseCasesServiceTest {
     @Mock
     private MenuBatchFailurePolicy menuBatchFailurePolicy;
 
+    @Mock
+    private FoodTypeClassifierPort foodTypeClassifierPort;
+
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     private MenuUseCasesService menuUseCasesService;
@@ -65,7 +71,7 @@ class MenuUseCasesServiceTest {
     void setUp() {
         this.menuUseCasesService = new MenuUseCasesService(
                 this.menuRepositoryPort, this.foodTypeRepositoryPort, this.menuEventPublisher, this.imageStoragePort,
-                this.menuBatchFailurePolicy, this.meterRegistry);
+                this.menuBatchFailurePolicy, this.meterRegistry, this.foodTypeClassifierPort);
     }
 
     @Test
@@ -231,7 +237,7 @@ class MenuUseCasesServiceTest {
         when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(existingMenu));
         when(this.menuRepositoryPort.save(any(Menu.class))).thenReturn(Mono.just(savedMenu));
 
-        this.menuUseCasesService.updateMenu(incoming)
+        this.menuUseCasesService.updateMenu(incoming, null)
                 .as(StepVerifier::create)
                 .expectNext(savedMenu)
                 .expectComplete()
@@ -253,7 +259,7 @@ class MenuUseCasesServiceTest {
         Menu incoming = aMenu().withId(MENU_ID).withTitle("New title").withDescription("New description").build();
         when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.empty());
 
-        this.menuUseCasesService.updateMenu(incoming)
+        this.menuUseCasesService.updateMenu(incoming, null)
                 .as(StepVerifier::create)
                 .expectError(MenuNotFoundException.class)
                 .verify();
@@ -270,7 +276,7 @@ class MenuUseCasesServiceTest {
         when(this.menuRepositoryPort.save(any(Menu.class)))
                 .thenReturn(Mono.error(new OptimisticLockingFailureException("stale version")));
 
-        this.menuUseCasesService.updateMenu(incoming)
+        this.menuUseCasesService.updateMenu(incoming, null)
                 .as(StepVerifier::create)
                 .expectError(MenuUnavailableException.class)
                 .verify();
@@ -380,5 +386,95 @@ class MenuUseCasesServiceTest {
                 this.meterRegistry.get("menu.image.orphan_cleanup.attempts").counter().count());
         org.junit.jupiter.api.Assertions.assertEquals(1,
                 this.meterRegistry.get("menu.image.orphan_cleanup.failures").counter().count());
+    }
+
+    @Test
+    void updateMenu_WhenFoodTypeIdsIsNull_DoesNotTouchFoodTypeAssignments() {
+        Menu existingMenu = aMenu().withId(MENU_ID).build();
+        Menu incoming = aMenu().withId(MENU_ID).withTitle("New title").withDescription("New description").build();
+        Menu savedMenu = aMenu().withId(MENU_ID).withTitle("New title").withDescription("New description").build();
+
+        when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(existingMenu));
+        when(this.menuRepositoryPort.save(any(Menu.class))).thenReturn(Mono.just(savedMenu));
+
+        this.menuUseCasesService.updateMenu(incoming, null)
+                .as(StepVerifier::create)
+                .expectNext(savedMenu)
+                .expectComplete()
+                .verify();
+
+        verify(this.foodTypeRepositoryPort, never()).replaceMenuFoodTypes(any(), any());
+    }
+
+    @Test
+    void updateMenu_WhenFoodTypeIdsIsProvided_ReplacesAssignmentsAndReturnsResolvedFoodTypes() {
+        Menu existingMenu = aMenu().withId(MENU_ID).build();
+        Menu incoming = aMenu().withId(MENU_ID).withTitle("New title").withDescription("New description").build();
+        Menu savedMenu = aMenu().withId(MENU_ID).withTitle("New title").withDescription("New description").build();
+        UUID foodTypeId = UUID.randomUUID();
+        Set<UUID> foodTypeIds = Set.of(foodTypeId);
+        FoodType foodType = new FoodType(foodTypeId, "Vegano", true);
+
+        when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(existingMenu));
+        when(this.menuRepositoryPort.save(any(Menu.class))).thenReturn(Mono.just(savedMenu));
+        when(this.foodTypeRepositoryPort.replaceMenuFoodTypes(MENU_ID, foodTypeIds)).thenReturn(Mono.empty());
+        when(this.foodTypeRepositoryPort.findByIds(foodTypeIds)).thenReturn(Flux.just(foodType));
+
+        this.menuUseCasesService.updateMenu(incoming, foodTypeIds)
+                .as(StepVerifier::create)
+                .assertNext(result -> org.junit.jupiter.api.Assertions.assertEquals(Set.of(foodType), result.getFoodTypes()))
+                .expectComplete()
+                .verify();
+
+        verify(this.foodTypeRepositoryPort, times(1)).replaceMenuFoodTypes(MENU_ID, foodTypeIds);
+    }
+
+    @Test
+    void suggestFoodType_WhenMenuDoesNotExist_ThrowsMenuNotFoundException() {
+        when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.empty());
+
+        this.menuUseCasesService.suggestFoodType(MENU_ID)
+                .as(StepVerifier::create)
+                .expectError(MenuNotFoundException.class)
+                .verify();
+    }
+
+    @Test
+    void suggestFoodType_WhenClassifierReturnsSuggestion_ReturnsItWithoutWritingAnything() {
+        Menu existingMenu = aMenu().withId(MENU_ID).withTitle("Ensalada verde").withDescription("Con lechuga").build();
+        FoodType vegano = new FoodType(UUID.randomUUID(), "Vegano", true);
+        FoodTypeSuggestion suggestion = new FoodTypeSuggestion(vegano, 0.75);
+
+        when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(existingMenu));
+        when(this.foodTypeRepositoryPort.findAllActive()).thenReturn(Flux.just(vegano));
+        when(this.foodTypeClassifierPort.suggestFoodType("Ensalada verde", "Con lechuga", Set.of(vegano)))
+                .thenReturn(Mono.just(suggestion));
+
+        this.menuUseCasesService.suggestFoodType(MENU_ID)
+                .as(StepVerifier::create)
+                .expectNext(suggestion)
+                .expectComplete()
+                .verify();
+
+        // Human-in-the-loop: sugerir NUNCA escribe — ni save, ni replaceMenuFoodTypes.
+        verify(this.menuRepositoryPort, never()).save(any());
+        verify(this.foodTypeRepositoryPort, never()).replaceMenuFoodTypes(any(), any());
+    }
+
+    @Test
+    void suggestFoodType_WhenClassifierReportsUnsafeResponse_ReturnsEmptyInsteadOfPropagatingError() {
+        Menu existingMenu = aMenu().withId(MENU_ID).build();
+
+        when(this.menuRepositoryPort.findById(MENU_ID)).thenReturn(Mono.just(existingMenu));
+        when(this.foodTypeRepositoryPort.findAllActive()).thenReturn(Flux.empty());
+        when(this.foodTypeClassifierPort.suggestFoodType(any(), any(), any()))
+                .thenReturn(Mono.error(new UnsafeAiResponseException("not in the closed list")));
+
+        this.menuUseCasesService.suggestFoodType(MENU_ID)
+                .as(StepVerifier::create)
+                .expectComplete()
+                .verify();
+
+        verify(this.menuRepositoryPort, never()).save(any());
     }
 }

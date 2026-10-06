@@ -15,8 +15,11 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 import demo.reactividad.application.port.in.MenuUseCases;
+import demo.reactividad.domain.model.FoodType;
+import demo.reactividad.domain.model.FoodTypeSuggestion;
 import demo.reactividad.domain.model.Menu;
 import demo.reactividad.infrastructure.adapter.in.web.MenuHandler;
+import demo.reactividad.infrastructure.adapter.in.web.dto.response.FoodTypeSuggestionResponseDTO;
 import demo.reactividad.infrastructure.adapter.in.web.exception.GlobalExceptionHandler;
 import demo.reactividad.infrastructure.adapter.in.web.mapper.MenuWebMapper;
 import demo.reactividad.infrastructure.adapter.in.web.multipart.MultipartFilePartExtractor;
@@ -70,5 +73,44 @@ class MenuRouterConfigTest {
                                 .contains("menuTitle")));
 
         verify(menuUseCases, never()).createMenu(any(Menu.class));
+    }
+
+    @Test
+    void getSuggestFoodTypeRoute_ResolvesMenuIdFromPathAndReturnsSuggestion() {
+        UUID menuId = UUID.randomUUID();
+        MenuUseCases menuUseCases = mock(MenuUseCases.class);
+        MenuWebMapper menuWebMapper = mock(MenuWebMapper.class);
+        FoodType vegano = new FoodType(UUID.randomUUID(), "Vegano", true);
+        FoodTypeSuggestion suggestion = new FoodTypeSuggestion(vegano, 0.75);
+        FoodTypeSuggestionResponseDTO responseDTO = new FoodTypeSuggestionResponseDTO(vegano.getId(), "Vegano", 0.75);
+        when(menuUseCases.suggestFoodType(menuId)).thenReturn(Mono.just(suggestion));
+        when(menuWebMapper.toResponseDTO(suggestion)).thenReturn(responseDTO);
+        MenuHandler menuHandler = new MenuHandler(
+                menuUseCases, menuWebMapper, mock(MultipartFilePartExtractor.class), this.requestValidator);
+        MenuRouterConfig router = new MenuRouterConfig(menuHandler, new GlobalExceptionHandler());
+        WebTestClient client = WebTestClient.bindToRouterFunction(router.menuRoutes()).build();
+
+        client.get().uri("/{menuId}/suggest-food-type", menuId)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.foodTypeName").isEqualTo("Vegano");
+
+        verify(menuUseCases).suggestFoodType(menuId);
+    }
+
+    @Test
+    void getSuggestFoodTypeRoute_WhenNoSafeSuggestion_ReturnsNoContent() {
+        UUID menuId = UUID.randomUUID();
+        MenuUseCases menuUseCases = mock(MenuUseCases.class);
+        when(menuUseCases.suggestFoodType(menuId)).thenReturn(Mono.empty());
+        MenuHandler menuHandler = new MenuHandler(
+                menuUseCases, mock(MenuWebMapper.class), mock(MultipartFilePartExtractor.class), this.requestValidator);
+        MenuRouterConfig router = new MenuRouterConfig(menuHandler, new GlobalExceptionHandler());
+        WebTestClient client = WebTestClient.bindToRouterFunction(router.menuRoutes()).build();
+
+        client.get().uri("/{menuId}/suggest-food-type", menuId)
+                .exchange()
+                .expectStatus().isNoContent();
     }
 }

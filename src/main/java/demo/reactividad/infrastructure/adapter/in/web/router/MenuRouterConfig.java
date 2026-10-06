@@ -39,6 +39,7 @@ public class MenuRouterConfig {
                   accept(MediaType.TEXT_EVENT_STREAM),
                   this.menuHandler::getMenuStream)
             .GET("/{menuId}", this.menuHandler::getMenu)
+            .GET("/{menuId}/suggest-food-type", this.menuHandler::suggestFoodTypeForMenu)
             .POST("/million",
                   contentType(MediaType.APPLICATION_NDJSON)
                   .and(accept(MediaType.APPLICATION_NDJSON)),

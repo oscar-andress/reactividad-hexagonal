@@ -6,29 +6,28 @@ Este reporte cita textualmente los 6 gaps del feedback de desempeño recibido, y
 
 | Gap | Texto del feedback | Estado |
 |---|---|---|
-| F | Calidad de Software: contract testing, quality gates, prevención de defectos, causa raíz, anti-regresión | 🟡 Parcial (3/4 ejercicios) |
+| F | Calidad de Software: contract testing, quality gates, prevención de defectos, causa raíz, anti-regresión | ✅ Completo (4/4) |
 | E | SOLID / trade-offs arquitectónicos / concurrencia e inmutabilidad | ✅ Completo (4/4) |
 | A | Arquitectura hexagonal: diseño evolutivo y límites de dominio | ✅ Completo (4/4) |
 | D | Resiliencia avanzada: aislamiento de recursos, tuning, observabilidad de negocio | ✅ Completo (4/4) |
 | B | Threat modeling y controles de seguridad | ✅ Completo (4/4) |
-| C | Gobernanza de IA: validación de modelos y gestión de riesgos | ⬜ Sin empezar (0/4) |
+| C | Gobernanza de IA: validación de modelos y gestión de riesgos | ✅ Completo (4/4) |
 
 ---
 
 ## F — "Requiere fortalecer de forma prioritaria el dominio de Calidad de Software, especialmente en contract testing, quality gates, prevención de defectos, análisis de causa raíz y mecanismos para evitar regresiones."
 
-**Estado:** 🟡 Parcial — 3 de 4 ejercicios cerrados.
+**Estado:** ✅ Completo — 4 de 4 ejercicios.
 
-**Herramientas:** `jacoco-maven-plugin`, `pitest-maven` + `pitest-junit5-plugin`, Jackson 3 (`tools.jackson.databind`), JUnit 5, Mockito (`ArgumentCaptor`), Logback (`ListAppender`, usado como parche temporal).
+**Herramientas:** `jacoco-maven-plugin`, `pitest-maven` + `pitest-junit5-plugin`, Jackson 3 (`tools.jackson.databind`), JUnit 5, Mockito (`ArgumentCaptor`), Logback (`ListAppender`, usado como parche temporal), GitHub Actions, Testcontainers.
 
 **Ejercicios realizados:**
 1. **Coverage gate** — `jacoco-maven-plugin` con dos umbrales (90% sobre `domain`/`application`, 60% overall), atado a la fase `test`, más un gate adicional en `verify` que también ve lo cubierto por los `*IT`.
 2. **Mutation testing** — PIT corrido sobre `domain.*`/`application.*`. Encontró un mutante `SURVIVED` real en `withPresignedImageUrl` (un `return null` tapado por un efecto secundario sobre `Menu` mutable) y un segundo hallazgo `NO_COVERAGE` en `MenuException.getErrorCode()`.
 3. **Contract/regression pinning** — golden-file tests (`MenuResponseDTOTest`, `OrderResponseDTOTest`, `ErrorResponseTest`) comparando por igualdad estructural completa contra archivos reales en `src/test/resources/golden/`, con un helper compartido (`GoldenFileAssertions`); más el pin reforzado del `PutObjectRequest` armado hacia S3 en `S3ImageStorageAdapterTest`.
+4. **CI + RCA** — `.github/workflows/ci.yml` corriendo `mvn verify` + PIT en cada PR, con artifacts. En el camino de verificarlo contra Docker real por primera vez, se encontró y arregló un bug real preexistente: `AbstractPostgresContainerTest` compartía un contenedor `static` entre las 4 clases `*IT` (bug mecánico de Java — campo `static` en una clase abstracta es uno solo, no uno por subclase), invisible hasta entonces porque nunca se había podido correr `mvn verify` con Docker en este entorno. Documentado en `docs/rca/0001-shared-testcontainer-across-it-classes.md`, con el gate verificado rojo→verde en 3 runs reales de GitHub Actions.
 
-**Pendiente:** ejercicio 4 — CI (GitHub Actions corriendo `mvn verify`, publicando reportes de JaCoCo/PIT) + nota de RCA retroactiva sobre el bug de `menu_created_at NOT NULL`.
-
-**Teoría aplicada:** cobertura de líneas vs. mutation score (cada una detecta un hueco distinto); la distinción `SURVIVED` (test débil) vs. `NO_COVERAGE` (ausencia total de test); causa raíz vs. parche explícitamente etiquetado (el `ListAppender` se documentó como parche, y se quitó al resolver la causa raíz en el Gap E); qué es un "pin" y un golden file; el criterio de cuándo vale la pena un contract test (cruza un límite externo + un test de comportamiento no lo detectaría); y la distinción entre un golden-file interno y Contract Testing consumer-driven (Pact/Spring Cloud Contract), reservado para cuando productor y consumidor se despliegan de forma independiente.
+**Teoría aplicada:** cobertura de líneas vs. mutation score (cada una detecta un hueco distinto); la distinción `SURVIVED` (test débil) vs. `NO_COVERAGE` (ausencia total de test); causa raíz vs. parche explícitamente etiquetado (el `ListAppender` se documentó como parche, y se quitó al resolver la causa raíz en el Gap E); qué es un "pin" y un golden file; el criterio de cuándo vale la pena un contract test (cruza un límite externo + un test de comportamiento no lo detectaría); la distinción entre un golden-file interno y Contract Testing consumer-driven (Pact/Spring Cloud Contract); qué es un RCA (síntoma → línea de tiempo → causa raíz → fix → verificación → prevención) y por qué un campo `static` en una clase abstracta se comparte entre subclases en Java.
 
 ---
 
@@ -98,12 +97,20 @@ Este reporte cita textualmente los 6 gaps del feedback de desempeño recibido, y
 
 ## C — "Debe reforzar criterios de gobernanza, validación de modelos y gestión de riesgos en el uso de IA."
 
-**Estado:** ⬜ Sin empezar — 0 de 4 ejercicios.
+**Estado:** ✅ Completo — 4 de 4 ejercicios.
 
-**Planeado (capstone del roadmap, no iniciado):** `FoodTypeClassifierPort`/`LlmFoodTypeClassifierAdapter` para sugerir un `FoodType` vía LLM, con gobernanza de entrada (defensa contra prompt injection, plantilla estricta), gobernanza de salida (validar la respuesta cruda contra el catálogo cerrado antes de cruzar el puerto), límites de costo/riesgo (`@TimeLimiter` + `@RateLimiter` reutilizando el Gap D), y human-in-the-loop (la sugerencia nunca se auto-aplica, requiere un `PUT` explícito).
+**Herramientas:** cliente de LLM simulado (`StubChatCompletionClient`, decisión explícita — sin proveedor real ni costo/credenciales), `resilience4j` (`@TimeLimiter`+`@RateLimiter`), Micrometer, Spring Data R2DBC (`@Query` en un repositorio dedicado para la tabla puente).
+
+**Ejercicios realizados:**
+1. **Gobernanza de entrada** — `LlmFoodTypeClassifierAdapter` arma el prompt desde una plantilla estricta (solo título/descripción, HTML/script removido, truncado a 200 caracteres), con los candidatos de `FoodType` como lista cerrada explícita en el propio prompt.
+2. **Gobernanza de salida** — la respuesta cruda del LLM se valida por coincidencia exacta (case-insensitive) contra el catálogo cerrado antes de cruzar el puerto; cualquier otra cosa (nombre alucinado, JSON malformado, vacío) termina en `UnsafeAiResponseException`, contada en un contador de Micrometer y nunca propagada como error ruidoso.
+3. **Límites de costo/riesgo** — `@TimeLimiter`(3s)/`@RateLimiter`(5 req/s) sobre la llamada al clasificador, reutilizando los patrones del Gap D.
+4. **Human-in-the-loop** — `GET /{menuId}/suggest-food-type` solo lee, nunca escribe. Se encontró que el `PUT` existente no podía aplicar ninguna sugerencia (no soportaba asignar food types a un menú) — se extendió explícitamente (`MenuUpdateRequestDTO.foodTypeIds`) para que la verificación fuera real de punta a punta, no solo "la sugerencia no escribe" aislado.
+
+**Teoría aplicada:** por qué un vehículo de práctica (la feature de IA) no necesita un proveedor real para enseñar los patrones de gobernanza que importan; defensa en profundidad (plantilla estricta + saneado + presupuesto de caracteres en la entrada, validación por lista cerrada en la salida — ninguna sola alcanza); por qué el campo `static @Container` de `AbstractPostgresContainerTest` no aplicaba al nuevo `*IT` de este gap de la misma forma que a los demás (ya resuelto en Gap F); reutilización de los 4 patrones de resiliencia del Gap D en un contexto nuevo (I/O hacia un LLM en vez de hacia S3/Postgres).
 
 ---
 
 ## Pendientes generales, fuera de los 6 gaps
 
-- Varios `*IT` (`OrderR2dbcRepositoryIT`, extensiones de `MenuWebIntegrationIT`/`OrderWebIntegrationIT` en los Gaps A/B) se escribieron pero nunca se corrieron con `mvn verify` en este sandbox (sin Docker) — pendiente confirmarlos en una máquina/CI con Docker disponible.
+Ninguno — con Docker disponible (vía WSL2, confirmado en el Gap F), se corrió `mvn verify` completo contra Postgres real para todos los `*IT` de todos los gaps, sin excepciones.
