@@ -1,6 +1,7 @@
 package demo.reactividad.application.usecase;
 
 import java.time.Duration;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import demo.reactividad.application.port.in.MenuUseCases;
+import demo.reactividad.application.port.out.FoodTypeClassifierPort;
 import demo.reactividad.application.port.out.FoodTypeRepositoryPort;
 import demo.reactividad.application.port.out.ImageStoragePort;
 import demo.reactividad.application.port.out.MenuBatchFailurePolicy;
@@ -17,6 +19,9 @@ import demo.reactividad.application.port.out.MenuRepositoryPort;
 import demo.reactividad.domain.exception.MenuCodeException;
 import demo.reactividad.domain.exception.MenuNotFoundException;
 import demo.reactividad.domain.exception.MenuUnavailableException;
+import demo.reactividad.domain.exception.UnsafeAiResponseException;
+import demo.reactividad.domain.model.FoodType;
+import demo.reactividad.domain.model.FoodTypeSuggestion;
 import demo.reactividad.domain.model.Menu;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +46,7 @@ public class MenuUseCasesService implements MenuUseCases {
     private final ImageStoragePort imageStoragePort;
     private final MenuBatchFailurePolicy menuBatchFailurePolicy;
     private final MeterRegistry meterRegistry;
+    private final FoodTypeClassifierPort foodTypeClassifierPort;
 
     @Override
     @Transactional(readOnly = true)
@@ -95,7 +101,7 @@ public class MenuUseCasesService implements MenuUseCases {
 
     @Override
     @Transactional
-    public Mono<Menu> updateMenu(Menu menu) {
+    public Mono<Menu> updateMenu(Menu menu, Set<UUID> foodTypeIds) {
         return this.menuRepositoryPort
                 .findById(menu.getId())
                 .switchIfEmpty(Mono.error(() -> new MenuNotFoundException("Menu with id " + menu.getId() + " not found",
@@ -104,11 +110,40 @@ public class MenuUseCasesService implements MenuUseCases {
                     Menu updated = existingMenu.withUpdatedDetails(menu.getTitle(), menu.getDescription());
                     return this.menuRepositoryPort.save(updated);
                 })
+                .flatMap(saved -> applyFoodTypesIfRequested(saved, foodTypeIds))
                 .doOnNext(this.menuEventPublisher::publish)
                 .onErrorMap(OptimisticLockingFailureException.class,
                         ex -> new MenuUnavailableException(
                                 "Menu with id " + menu.getId() + " was updated concurrently, please retry",
                                 MenuCodeException.CONFLICT.name()));
+    }
+
+    private Mono<Menu> applyFoodTypesIfRequested(Menu menu, Set<UUID> foodTypeIds) {
+        if (foodTypeIds == null) {
+            return Mono.just(menu);
+        }
+        return this.foodTypeRepositoryPort.replaceMenuFoodTypes(menu.getId(), foodTypeIds)
+                .then(this.foodTypeRepositoryPort.findByIds(foodTypeIds).collect(Collectors.toSet()))
+                .map(menu::withFoodTypes);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Mono<FoodTypeSuggestion> suggestFoodType(UUID menuId) {
+        return this.menuRepositoryPort.findById(menuId)
+                .switchIfEmpty(Mono.error(() -> new MenuNotFoundException("Menu with id " + menuId + " not found",
+                        MenuCodeException.NOT_FOUND.name())))
+                .flatMap(menu -> this.foodTypeRepositoryPort.findAllActive()
+                        .collect(Collectors.toSet())
+                        .flatMap(candidates -> suggestFoodTypeSafely(menu, candidates)));
+    }
+
+    private Mono<FoodTypeSuggestion> suggestFoodTypeSafely(Menu menu, Set<FoodType> candidates) {
+        return this.foodTypeClassifierPort.suggestFoodType(menu.getTitle(), menu.getDescription(), candidates)
+                .onErrorResume(UnsafeAiResponseException.class, error -> {
+                    log.warn("No safe FoodType suggestion for menu {}: {}", menu.getId(), error.getMessage());
+                    return Mono.empty();
+                });
     }
 
     @Override

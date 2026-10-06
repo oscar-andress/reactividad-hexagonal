@@ -30,7 +30,10 @@ import demo.reactividad.infrastructure.adapter.in.web.dto.request.MenuUpdateRequ
 import demo.reactividad.infrastructure.adapter.in.web.dto.response.MenuResponseDTO;
 import demo.reactividad.infrastructure.adapter.in.web.security.AuthenticationCategory;
 import demo.reactividad.infrastructure.adapter.in.web.security.JwtTokenService;
+import demo.reactividad.infrastructure.adapter.out.persistence.entity.FoodTypeEntity;
 import demo.reactividad.infrastructure.adapter.out.persistence.entity.MenuEntity;
+import demo.reactividad.infrastructure.adapter.out.persistence.repository.FoodTypeR2dbcRepository;
+import demo.reactividad.infrastructure.adapter.out.persistence.repository.MenuFoodTypeR2dbcRepository;
 import demo.reactividad.infrastructure.adapter.out.persistence.repository.MenuR2dbcRepository;
 import demo.reactividad.testsupport.containers.AbstractPostgresContainerTest;
 import reactor.test.StepVerifier;
@@ -51,9 +54,16 @@ class MenuWebIntegrationIT extends AbstractPostgresContainerTest {
     private MenuR2dbcRepository menuR2dbcRepository;
 
     @Autowired
+    private FoodTypeR2dbcRepository foodTypeR2dbcRepository;
+
+    @Autowired
+    private MenuFoodTypeR2dbcRepository menuFoodTypeR2dbcRepository;
+
+    @Autowired
     private JwtTokenService jwtTokenService;
 
     private MenuEntity existingMenu;
+    private FoodTypeEntity existingFoodType;
     private String standardToken;
     private String primeToken;
 
@@ -61,9 +71,15 @@ class MenuWebIntegrationIT extends AbstractPostgresContainerTest {
     void setUp() {
         this.standardToken = this.jwtTokenService.generate(AuthenticationCategory.STANDARD);
         this.primeToken = this.jwtTokenService.generate(AuthenticationCategory.PRIME);
+        // tbl_menu_food_type tiene FK hacia ambas tablas — hay que vaciarla antes de
+        // poder vaciar tbl_menu/tbl_food_type sin violar la constraint.
+        this.menuFoodTypeR2dbcRepository.deleteAllAssignments().block();
         this.existingMenu = this.menuR2dbcRepository.deleteAll()
                 .then(this.menuR2dbcRepository.save(aMenuEntity().build())
                           .doOnNext(l -> log.info("{}", l)))
+                .block();
+        this.existingFoodType = this.foodTypeR2dbcRepository.deleteAll()
+                .then(this.foodTypeR2dbcRepository.save(new FoodTypeEntity(null, "Vegano", true)))
                 .block();
     }
 
@@ -225,5 +241,44 @@ class MenuWebIntegrationIT extends AbstractPostgresContainerTest {
         } finally {
             executor.shutdown();
         }
+    }
+
+    // Gap C, ejercicio 4 (human-in-the-loop): la sugerencia nunca escribe en la BD, por
+    // más veces que se llame — solo un PUT explícito y posterior aplica el cambio.
+    @Test
+    void suggestFoodTypeForMenu_NeverWritesUntilAnExplicitPutApplies() {
+        this.webTestClient.get()
+                .uri(MENU_PATH + "/{menuId}/suggest-food-type", this.existingMenu.getId())
+                .header(AUTH_HEADER, this.standardToken)
+                .exchange()
+                .expectStatus().is2xxSuccessful();
+
+        List<FoodTypeEntity> foodTypesAfterSuggestion = this.foodTypeR2dbcRepository
+                .findFoodTypeByMenuId(this.existingMenu.getId())
+                .collectList()
+                .block();
+        org.junit.jupiter.api.Assertions.assertTrue(foodTypesAfterSuggestion.isEmpty(),
+                "La sugerencia no debe asignar ningún food type por sí sola");
+
+        MenuUpdateRequestDTO update = aMenuUpdateRequestDTO()
+                .withFoodTypeIds(java.util.Set.of(this.existingFoodType.getFoodTypeId()))
+                .build();
+
+        this.webTestClient.put()
+                .uri(MENU_PATH + "/{menuId}", this.existingMenu.getId())
+                .header(AUTH_HEADER, this.primeToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(update)
+                .exchange()
+                .expectStatus().is2xxSuccessful();
+
+        List<FoodTypeEntity> foodTypesAfterPut = this.foodTypeR2dbcRepository
+                .findFoodTypeByMenuId(this.existingMenu.getId())
+                .collectList()
+                .block();
+        org.junit.jupiter.api.Assertions.assertEquals(1, foodTypesAfterPut.size(),
+                "El PUT explícito sí debe aplicar la asignación de food types");
+        org.junit.jupiter.api.Assertions.assertEquals(
+                this.existingFoodType.getFoodTypeId(), foodTypesAfterPut.get(0).getFoodTypeId());
     }
 }

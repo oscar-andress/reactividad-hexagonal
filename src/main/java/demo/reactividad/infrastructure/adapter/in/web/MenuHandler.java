@@ -76,10 +76,20 @@ public class MenuHandler {
         UUID menuId = UUID.fromString(request.pathVariable("menuId"));
         return request.bodyToMono(MenuUpdateRequestDTO.class)
                       .flatMap(this.requestValidator::validate)
-                      .map(dto -> this.menuWebMapper.toDomain(menuId, dto))
-                      .flatMap(this.menuUseCases::updateMenu)
+                      .flatMap(dto -> this.menuUseCases.updateMenu(
+                              this.menuWebMapper.toDomain(menuId, dto), dto.foodTypeIds()))
                       .map(this.menuWebMapper::toResponseDTO)
                       .flatMap(dto -> ServerResponse.ok().bodyValue(dto));
+    }
+
+    // Gap C, ejercicio 4 (human-in-the-loop): solo lee y sugiere, nunca escribe. Aplicar
+    // la sugerencia requiere un PUT explícito y separado (updateMenu, con foodTypeIds).
+    public Mono<ServerResponse> suggestFoodTypeForMenu(ServerRequest request) {
+        UUID menuId = UUID.fromString(request.pathVariable("menuId"));
+        return this.menuUseCases.suggestFoodType(menuId)
+                .map(this.menuWebMapper::toResponseDTO)
+                .flatMap(dto -> ServerResponse.ok().bodyValue(dto))
+                .switchIfEmpty(ServerResponse.noContent().build());
     }
 
     @RateLimiter(name = MENU_IMAGE_UPLOAD_RATE_LIMITER)

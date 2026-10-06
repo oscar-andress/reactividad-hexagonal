@@ -5,10 +5,12 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Component;
 
+import demo.reactividad.domain.model.FoodTypeSuggestion;
 import demo.reactividad.domain.model.Menu;
 import demo.reactividad.infrastructure.adapter.in.web.dto.request.MenuCreateRequestDTO;
 import demo.reactividad.infrastructure.adapter.in.web.dto.request.MenuUpdateRequestDTO;
 import demo.reactividad.infrastructure.adapter.in.web.dto.response.FoodTypeResponseDTO;
+import demo.reactividad.infrastructure.adapter.in.web.dto.response.FoodTypeSuggestionResponseDTO;
 import demo.reactividad.infrastructure.adapter.in.web.dto.response.MenuResponseDTO;
 import lombok.RequiredArgsConstructor;
 
@@ -35,5 +37,12 @@ public class MenuWebMapper {
 
     public Menu toDomain(UUID menuId, MenuUpdateRequestDTO request) {
         return new Menu(menuId, request.menuTitle(), request.menuDescription());
+    }
+
+    public FoodTypeSuggestionResponseDTO toResponseDTO(FoodTypeSuggestion suggestion) {
+        return new FoodTypeSuggestionResponseDTO(
+            suggestion.foodType().getId(),
+            suggestion.foodType().getName(),
+            suggestion.confidence());
     }
 }
