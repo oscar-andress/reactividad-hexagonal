@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # El repo se creó desde Windows — mvnw no trae el bit de ejecución en git.
+      - name: Make mvnw executable
+        run: chmod +x mvnw
+
+      # mvn verify corre *Test (Surefire) + *IT (Failsafe, con Postgres real vía
+      # Testcontainers) + los gates de JaCoCo (90% domain/application, 60% overall).
+      # Los runners de GitHub Actions ya traen Docker corriendo — a diferencia del
+      # entorno local, no hace falta ningún DOCKER_HOST especial (ver docs/rca/0001-...).
+      - name: Run tests and quality gates (mvn verify)
+        run: ./mvnw verify
+
+      # Mutation testing no está atado a ninguna fase del build (es lento) — se corre
+      # aparte, a demanda, igual que en local. No falla el build si el score baja: es
+      # informativo, no un gate duro (ver docs/mutation-testing.md).
+      - name: Run mutation testing (PIT)
+        if: always()
+        run: ./mvnw org.pitest:pitest-maven:mutationCoverage
+
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
+          if-no-files-found: ignore
+
+      - name: Upload PIT report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pit-report
+          path: target/pit-reports/
+          if-no-files-found: ignore
