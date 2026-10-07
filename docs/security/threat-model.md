@@ -86,7 +86,7 @@ Por transparencia — encontrados durante la misma revisión, pero sin ningún e
 
 - **Repudiation**: no hay ID de correlación ni auditoría de "quién hizo qué" — no hay forma de probar o refutar que un cliente específico envió una request dada.
 - **Information Disclosure (menor)**: `GlobalExceptionHandler`/`OrderExceptionHandler` exponen `ex.getMessage()` directo en la respuesta HTTP. Para las excepciones de dominio actuales el mensaje es controlado y seguro ("Menu with id X not found"), pero el patrón en sí es frágil — si alguna vez una excepción no mapeada con un mensaje interno llegara a propagarse, se filtraría tal cual al cliente.
-- **Credenciales en `application.properties`**: usuario/password de Postgres y claves de S3 en texto plano — esperable para un perfil local/dev, pero vale la pena confirmar que ningún entorno real usa este mismo archivo sin reemplazarlas.
+- ~~**Credenciales en `application.properties`**~~ — cerrado, ver "Cierre posterior" al final del documento.
 
 ## Mapa de trazabilidad (hallazgo → ejercicio → verificación)
 
@@ -99,4 +99,14 @@ Por transparencia — encontrados durante la misma revisión, pero sin ningún e
 | Sin límite de tamaño en upload multipart | Denial of Service | *(sin cerrar — anotado arriba)* | — |
 | Sin auditoría/correlación de requests | Repudiation | *(fuera de alcance de este gap)* | — |
 | Mensajes de excepción expuestos directo en la respuesta | Information Disclosure | *(fuera de alcance de este gap)* | — |
-| Credenciales en texto plano en `application.properties` | Information Disclosure | *(fuera de alcance de este gap)* | — |
+| Credenciales en texto plano en `application.properties` | Information Disclosure | Cierre posterior (ver abajo) | Valores reemplazados por `${VAR:default-dev}`; se verifica leyendo el archivo — cero literales sensibles |
+
+## Cierre posterior: credenciales fuera del repo
+
+Cerrado fuera del Gap B original, como parte de una ruta de aprendizaje de seguridad.
+
+**Decisión** (antes de tocar código): variables de entorno con default de solo-desarrollo (`${VAR:valor-dev}`), no un perfil separado ni un vault — resuelve el problema real (nada sensible en git) sin agregar infraestructura nueva. Se descartó un vault (ej. Spring Cloud Vault) por sobreingeniería para el alcance de este proyecto; se descartó un `application-local.properties` ignorado por git por ser un archivo más para mantener sin ganar nada que el placeholder no dé ya.
+
+**Qué cambió:** `spring.r2dbc.username`/`password`, `aws.s3.access-key`/`secret-key` y `security.jwt.secret` pasaron de literales a `${NOMBRE_VARIABLE:default-de-desarrollo}`. El default después de `:` nunca es un secreto real — son los valores ya conocidos de Postgres/LocalStack en local. En cualquier entorno real, esas variables de entorno deben estar seteadas; si no lo están, la app sigue arrancando con el default de desarrollo, que es intencional para no romper el flujo local.
+
+**Verificación:** `mvn test` sigue en verde sin cambios (los `*Test`/`*IT` no dependen de estos valores — Testcontainers sobreescribe la conexión real vía `@ServiceConnection`, y los tests de S3 mockean `S3AsyncClient`). No se verificó empíricamente en esta sesión que una variable de entorno real sobreescriba el placeholder — es comportamiento estándar de Spring Boot (`${VAR:default}`), no un mecanismo propio de este proyecto como sí lo son los proxies de resilience4j, así que no se consideró necesario reproducirlo aquí.
