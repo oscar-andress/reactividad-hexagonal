@@ -1,3 +1,7 @@
+-- Migración inicial: el mismo contenido que tenía schema.sql antes de adoptar
+-- Flyway (ver docs/data/two-phase-migration.md). Nada cambia estructuralmente
+-- en esta migración — es solo mover el estado actual a un formato versionado.
+
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- tbl_menu
