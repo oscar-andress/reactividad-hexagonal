@@ -13,6 +13,7 @@ import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
+import demo.reactividad.domain.exception.FeatureDisabledException;
 import demo.reactividad.domain.exception.ImageStorageException;
 import demo.reactividad.domain.exception.MenuNotFoundException;
 import demo.reactividad.domain.exception.MenuUnavailableException;
@@ -141,6 +142,7 @@ public class MenuRouterConfig {
             .onError(ConstraintViolationException.class, this.globalExceptionHandler::handleConstraintViolationException)
             .onError(RequestNotPermitted.class, this.globalExceptionHandler::handleRequestNotPermitted)
             .onError(IllegalArgumentException.class, this.globalExceptionHandler::handleIllegalArgumentException)
+            .onError(FeatureDisabledException.class, this.globalExceptionHandler::handleFeatureDisabledException)
             .build();
     }
 }

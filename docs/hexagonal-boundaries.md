@@ -265,3 +265,37 @@ El `GlobalExceptionHandler` existente está atado a `MenuException` (usa `ex.get
 - PIT: **100%** (42/42 mutantes muertos) tras agregar la lógica nueva de `createOrder`/`streamOrders`.
 
 Con esto se cierran los 4 ejercicios del Gap A (Arquitectura Hexagonal: Diseño Evolutivo y Límites de Dominio).
+
+## Extensión posterior: la regla de capas hexagonales en sí, no solo el límite `Orders`/`Menu`
+
+Las 3 reglas de ArchUnit de arriba verifican el límite entre bounded contexts (`Orders` nunca depende de `Menu`), pero la regla de dependencia de la arquitectura hexagonal *en sí* (dominio no sabe nada de las capas de afuera; aplicación no depende de infraestructura) solo estaba escrita como convención en `CLAUDE.md`, Sección 1 — nunca verificada por un test real. Surgió al decidir dónde debía vivir `FoodTypeSuggestionProperties` (ver `docs/data/feature-flag-reversibility.md`): la respuesta ("en `application.usecase`, no en `infrastructure.config` como `S3Properties`, porque moverla ahí haría que `application` dependa de `infrastructure`") era correcta por razonamiento, pero nada la hacía cumplir mecánicamente.
+
+Dos reglas nuevas en `ArchitectureRulesTest`, con el mismo patrón que las 3 anteriores pero aplicadas a ambos bounded contexts (`demo.reactividad.*` y `demo.reactividad.orders.*`):
+
+```java
+@Test
+void domainNeverDependsOnApplicationOrInfrastructure() {
+    ArchRule rule = noClasses()
+            .that().resideInAnyPackage("demo.reactividad.domain..", "demo.reactividad.orders.domain..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "demo.reactividad.application..",
+                    "demo.reactividad.orders.application..",
+                    "demo.reactividad.infrastructure..",
+                    "demo.reactividad.orders.infrastructure..");
+    rule.check(ALL_CLASSES);
+}
+
+@Test
+void applicationNeverDependsOnInfrastructure() {
+    ArchRule rule = noClasses()
+            .that().resideInAnyPackage("demo.reactividad.application..", "demo.reactividad.orders.application..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "demo.reactividad.infrastructure..",
+                    "demo.reactividad.orders.infrastructure..");
+    rule.check(ALL_CLASSES);
+}
+```
+
+**Verificado rompiendo a propósito — y un hallazgo real sobre cómo funciona ArchUnit.** Para confirmar que `applicationNeverDependsOnInfrastructure` detecta de verdad una violación, el primer intento fue agregar `import demo.reactividad.infrastructure.config.S3Properties;` a `MenuUseCasesService` sin usarlo — el test **pasó igual**, dando una falsa sensación de que no había ninguna violación posible. Causa: `ArchUnit` (vía `ClassFileImporter`) analiza **bytecode compilado**, no código fuente — un `import` sin usar no genera ninguna instrucción en el `.class`, así que no existe como dependencia desde el punto de vista de la herramienta. Recién al agregar un campo realmente tipado como `S3Properties` (`private S3Properties temporaryViolationForArchTest;`), que sí genera una referencia real en el bytecode, el test falló señalando exactamente el campo, su tipo y la clase. Ambos (el import y el campo) se revirtieron después de confirmar esto. Este hallazgo generalizó a una regla nueva en `CLAUDE.md` Parte 1, Sección 2: cualquier "romper a propósito" sobre una herramienta de dependencias estática basada en bytecode necesita un uso real, no un import suelto.
+
+**Resultado:** las 5 reglas de `ArchitectureRulesTest` en verde, `mvn test` y `mvn verify` (con Docker real) completos sin regresiones.

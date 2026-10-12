@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
+import demo.reactividad.domain.exception.FeatureDisabledException;
 import demo.reactividad.domain.exception.ImageStorageException;
 import demo.reactividad.domain.exception.MenuException;
 import demo.reactividad.domain.exception.MenuNotFoundException;
@@ -60,6 +61,13 @@ public class GlobalExceptionHandler {
     // para un cliente HTTP.
     public Mono<ServerResponse> handleIllegalArgumentException(IllegalArgumentException ex, ServerRequest request) {
         return buildResponse(INVALID_PARAMETER_MESSAGE, INVALID_PARAMETER_CODE, request, HttpStatus.BAD_REQUEST);
+    }
+
+    // 503, no 404/204 -- distingue a propósito "la feature está apagada" de "no hubo
+    // sugerencia" (204, sigue existiendo) y de "la ruta no existe" (404). Ver
+    // docs/data/feature-flag-reversibility.md.
+    public Mono<ServerResponse> handleFeatureDisabledException(FeatureDisabledException ex, ServerRequest request) {
+        return buildResponse(ex, request, HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     private Mono<ServerResponse> buildResponse(MenuException ex, ServerRequest request, HttpStatus status) {
