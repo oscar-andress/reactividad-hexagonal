@@ -87,8 +87,12 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
                 .expectStatus().isUnauthorized();
     }
 
+    // Antes era postOrder_Forbidden (esperaba 403) -- STANDARD solo podía hacer GET.
+    // Ahora STANDARD puede crear su propio pedido a propósito (ver
+    // docs/security/threat-model.md, cierre de Elevation of Privilege): crear un pedido
+    // es la única escritura que un cliente final legítimamente necesita.
     @Test
-    void postOrder_Forbidden() {
+    void postOrder_WithStandardToken_Succeeds() {
         OrderCreateRequestDTO order = anOrderCreateRequestDTO().withMenuId(this.existingMenu.getId()).withQuantity(1).build();
 
         this.webTestClient.post()
@@ -97,7 +101,7 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(order)
                 .exchange()
-                .expectStatus().isForbidden();
+                .expectStatus().is2xxSuccessful();
     }
 
     @Test

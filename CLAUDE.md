@@ -64,6 +64,9 @@ Este documento tiene dos partes. La **Parte 1** es conocimiento de ingeniería d
 - **DEBE** validarse en el borde de entrada con error estructurado (4xx claro). **NUNCA** duplicar una validación que el dominio ya garantiza como invariante.
 - **NUNCA** secretos/tokens estáticos en código fuente. **DEBE** ser firmado, de corta duración, verificable (firma + expiración) y revocable sin redeploy.
 - **DEBE** tener rate limiting carriles separados por endpoint/perfil de costo. *Convención de test:* ráfagas disparadas concurrentemente, nunca en secuencia — un test secuencial es flaky bajo carga variable de la máquina.
+- **DEBE** correrse un Active Scan de DAST (ej. OWASP ZAP) solo contra un entorno efímero, nunca contra algo persistente o compartido — manda payloads de ataque reales que pueden mutar datos o disparar migraciones de verdad. *Criterio:* mismo principio que ya aplica a los tests de integración con Testcontainers, a otro nivel (un proceso completo, no una JVM de test).
+- **PREFERÍ** alimentar un scanner DAST con el contrato real de la API (ej. un spec OpenAPI importado) en vez de que descubra rutas por crawling, cuando el backend es una API — un Spider que sigue links HTML no sirve para una API JSON pura.
+- **Convención — Risk vs. Confidence:** dos ejes independientes al interpretar un hallazgo de una herramienta de seguridad automatizada — *Risk* mide qué tan grave sería si fuera real, *Confidence* mide qué tan segura está la herramienta de que sea real. Se priorizan combinados, nunca por uno solo.
 
 ## 7. Observabilidad orientada a negocio
 - **PREFERÍ** un contador dedicado sobre un log cuando la pregunta es agregada ("¿cuánto pasó esto en total?") en vez de puntual ("¿qué pasó en este caso?").
