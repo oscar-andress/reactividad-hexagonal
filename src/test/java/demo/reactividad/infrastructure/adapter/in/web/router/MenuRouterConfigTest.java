@@ -113,4 +113,23 @@ class MenuRouterConfigTest {
                 .exchange()
                 .expectStatus().isNoContent();
     }
+
+    // Reproduce el hallazgo real de OWASP ZAP (ver docs/security/threat-model.md): un
+    // menuId con formato inválido rompía UUID.fromString sin que nada lo capturara,
+    // devolviendo un 500 con el stack trace completo en el body.
+    @Test
+    void getRoute_WhenMenuIdIsNotAValidUuid_RejectsWithBadRequestInsteadOfLeakingStackTrace() {
+        MenuUseCases menuUseCases = mock(MenuUseCases.class);
+        MenuHandler menuHandler = new MenuHandler(
+                menuUseCases, mock(MenuWebMapper.class), mock(MultipartFilePartExtractor.class), this.requestValidator);
+        MenuRouterConfig router = new MenuRouterConfig(menuHandler, new GlobalExceptionHandler());
+        WebTestClient client = WebTestClient.bindToRouterFunction(router.menuRoutes()).build();
+
+        client.get().uri("/{menuId}", "not-a-uuid")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.errorCode").isEqualTo("INVALID_PARAMETER")
+                .jsonPath("$.message").isEqualTo("Invalid request parameter format");
+    }
 }

@@ -23,6 +23,8 @@ public class GlobalExceptionHandler {
     private static final String IMAGE_STORAGE_FAILED_CODE = "IMAGE_STORAGE_FAILED";
     private static final String VALIDATION_FAILED_CODE = "VALIDATION_FAILED";
     private static final String RATE_LIMIT_EXCEEDED_CODE = "RATE_LIMIT_EXCEEDED";
+    private static final String INVALID_PARAMETER_CODE = "INVALID_PARAMETER";
+    private static final String INVALID_PARAMETER_MESSAGE = "Invalid request parameter format";
 
     public Mono<ServerResponse> handleMenuUnavailableException(MenuUnavailableException ex, ServerRequest request) {
         return buildResponse(ex, request, HttpStatus.CONFLICT);
@@ -47,6 +49,17 @@ public class GlobalExceptionHandler {
 
     public Mono<ServerResponse> handleRequestNotPermitted(RequestNotPermitted ex, ServerRequest request) {
         return buildResponse(ex.getMessage(), RATE_LIMIT_EXCEEDED_CODE, request, HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    // Hallazgo real de OWASP ZAP (ver docs/security/threat-model.md): un menuId con
+    // formato inválido (ej. no un UUID) rompía UUID.fromString sin que nada lo capturara,
+    // escapando hasta el manejador default de Spring con un 500 y el stack trace
+    // completo en el body. Nunca se usa ex.getMessage() acá a propósito -- a diferencia
+    // de las demás excepciones de este archivo (de dominio, con mensajes ya controlados),
+    // IllegalArgumentException es genérica y puede venir con texto interno no pensado
+    // para un cliente HTTP.
+    public Mono<ServerResponse> handleIllegalArgumentException(IllegalArgumentException ex, ServerRequest request) {
+        return buildResponse(INVALID_PARAMETER_MESSAGE, INVALID_PARAMETER_CODE, request, HttpStatus.BAD_REQUEST);
     }
 
     private Mono<ServerResponse> buildResponse(MenuException ex, ServerRequest request, HttpStatus status) {

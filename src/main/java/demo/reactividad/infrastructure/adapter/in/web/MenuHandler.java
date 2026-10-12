@@ -33,9 +33,13 @@ public class MenuHandler {
     private final MultipartFilePartExtractor multipartFilePartExtractor;
     private final RequestValidator requestValidator;
 
+    // menuId se parsea dentro de Mono.fromCallable, no antes del Mono -- un
+    // IllegalArgumentException lanzado afuera de la cadena reactiva nunca llega al
+    // .onError(...) del router (ver docs/security/threat-model.md, hallazgo real de
+    // OWASP ZAP: un menuId inválido escapaba como 500 con el stack trace completo).
     public Mono<ServerResponse> getMenu(ServerRequest request) {
-        UUID menuId = UUID.fromString(request.pathVariable("menuId"));
-        return this.menuUseCases.getMenu(menuId)
+        return Mono.fromCallable(() -> UUID.fromString(request.pathVariable("menuId")))
+                .flatMap(this.menuUseCases::getMenu)
                 .map(this.menuWebMapper::toResponseDTO)
                 .flatMap(dto -> ServerResponse.status(HttpStatus.OK).bodyValue(dto));
     }
@@ -58,7 +62,8 @@ public class MenuHandler {
     }
 
     public Mono<ServerResponse> deleteMenu(ServerRequest request) {
-        return this.menuUseCases.deleteMenu(UUID.fromString(request.pathVariable("menuId")))
+        return Mono.fromCallable(() -> UUID.fromString(request.pathVariable("menuId")))
+                .flatMap(this.menuUseCases::deleteMenu)
                 .then(ServerResponse.noContent().build());
     }
 
@@ -73,20 +78,20 @@ public class MenuHandler {
     }
 
     public Mono<ServerResponse> updateMenu(ServerRequest request) {
-        UUID menuId = UUID.fromString(request.pathVariable("menuId"));
-        return request.bodyToMono(MenuUpdateRequestDTO.class)
-                      .flatMap(this.requestValidator::validate)
-                      .flatMap(dto -> this.menuUseCases.updateMenu(
-                              this.menuWebMapper.toDomain(menuId, dto), dto.foodTypeIds()))
-                      .map(this.menuWebMapper::toResponseDTO)
-                      .flatMap(dto -> ServerResponse.ok().bodyValue(dto));
+        return Mono.fromCallable(() -> UUID.fromString(request.pathVariable("menuId")))
+                .flatMap(menuId -> request.bodyToMono(MenuUpdateRequestDTO.class)
+                        .flatMap(this.requestValidator::validate)
+                        .flatMap(dto -> this.menuUseCases.updateMenu(
+                                this.menuWebMapper.toDomain(menuId, dto), dto.foodTypeIds())))
+                .map(this.menuWebMapper::toResponseDTO)
+                .flatMap(dto -> ServerResponse.ok().bodyValue(dto));
     }
 
     // Gap C, ejercicio 4 (human-in-the-loop): solo lee y sugiere, nunca escribe. Aplicar
     // la sugerencia requiere un PUT explícito y separado (updateMenu, con foodTypeIds).
     public Mono<ServerResponse> suggestFoodTypeForMenu(ServerRequest request) {
-        UUID menuId = UUID.fromString(request.pathVariable("menuId"));
-        return this.menuUseCases.suggestFoodType(menuId)
+        return Mono.fromCallable(() -> UUID.fromString(request.pathVariable("menuId")))
+                .flatMap(this.menuUseCases::suggestFoodType)
                 .map(this.menuWebMapper::toResponseDTO)
                 .flatMap(dto -> ServerResponse.ok().bodyValue(dto))
                 .switchIfEmpty(ServerResponse.noContent().build());
@@ -94,9 +99,9 @@ public class MenuHandler {
 
     @RateLimiter(name = MENU_IMAGE_UPLOAD_RATE_LIMITER)
     public Mono<ServerResponse> uploadMenuImage(ServerRequest request) {
-        UUID menuId = UUID.fromString(request.pathVariable("menuId"));
-        return this.multipartFilePartExtractor.extract(request, IMAGE_PART_NAME)
-                .flatMap(file -> this.menuUseCases.uploadMenuImage(menuId, file.content(), file.contentType()))
+        return Mono.fromCallable(() -> UUID.fromString(request.pathVariable("menuId")))
+                .flatMap(menuId -> this.multipartFilePartExtractor.extract(request, IMAGE_PART_NAME)
+                        .flatMap(file -> this.menuUseCases.uploadMenuImage(menuId, file.content(), file.contentType())))
                 .map(this.menuWebMapper::toResponseDTO)
                 .flatMap(dto -> ServerResponse.ok().bodyValue(dto));
     }
