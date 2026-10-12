@@ -136,3 +136,15 @@ Cerrado fuera del Gap B original, como parte de la ruta de aprendizaje de seguri
 **Qué no se tocó:** `Orders` no tiene el mismo patrón (`OrderCreateRequestDTO.menuId()` ya es `UUID` tipado, Jackson lo parsea al deserializar el body, no hay un `UUID.fromString` manual) — no se persiguió una variante hipotética sin verificar ahí; la defensa en profundidad del punto 2 ya cubre cualquier caso no previsto, en cualquier contexto.
 
 **Verificación:** test nuevo en `MenuRouterConfigTest` (`getRoute_WhenMenuIdIsNotAValidUuid_RejectsWithBadRequestInsteadOfLeakingStackTrace`) reproduce exactamente el escenario de ZAP. Roto a propósito (revirtiendo `getMenu` a la versión síncrona) → falla con `Status expected:<400 BAD_REQUEST> but was:<500 INTERNAL_SERVER_ERROR>` → restaurado → verde de nuevo. `mvn test` completo en verde. Reproducido además contra la app real (Postgres descartable en :5433): la misma request que mandó ZAP ahora devuelve `400`, 182 bytes, sin ningún stack trace — antes devolvía `500`, 16.620 bytes.
+
+## Cierre posterior: granularidad de autorización (la otra mitad del hallazgo de Elevation of Privilege)
+
+Cerrado fuera del Gap B original. El hallazgo de Elevation of Privilege de más arriba se cerró parcialmente con el ejercicio 3 (JWT de corta duración en vez de tokens estáticos) — pero eso solo acota *cuánto dura* un token comprometido, no el problema de fondo: el modelo seguía siendo binario por verbo HTTP (`AuthorizationWebFilter`: `STANDARD` solo `GET`, `PRIME` literalmente todo), sin distinguir una escritura de cliente final de una escritura administrativa.
+
+**El problema concreto:** con ese modelo, `STANDARD` no podía ni crear su propio pedido (`POST /api/v1/order/`) — la única escritura que un cliente final legítimamente necesita hacer quedaba bloqueada junto con las administrativas (crear/editar/borrar menús), simplemente porque el filtro solo miraba si el verbo era `GET` o no.
+
+**Decisión:** en vez de seguir decidiendo por verbo HTTP, `AuthorizationWebFilter.standard(...)` ahora también permite una operación específica — `POST` a la ruta exacta de creación de pedido (`/api/v1/order/`) — manteniendo cualquier otra escritura exclusiva de `PRIME`. Se usó comparación exacta de path (`ORDER_CREATE_PATH.equals(...)`), no un prefijo ni un patrón — para no abrir de más otras rutas bajo `/api/v1/order/` que pudieran agregarse después sin pensarlo.
+
+**Qué no se tocó:** no se construyó una tabla genérica de permisos por operación (ej. un mapa configurable ruta→categorías) — hubiera sido una abstracción para un solo caso real hoy. Si en el futuro aparecen más operaciones que `STANDARD` deba poder hacer, ese es el momento de generalizar, no antes.
+
+**Verificación:** `AuthorizationWebFilterTest` nuevo (no existía ningún test de este filtro antes) — casos para `STANDARD` con `GET` (sigue permitido), `STANDARD` creando un pedido (nuevo, permitido), `STANDARD` creando/borrando un menú (sigue prohibido), y `PRIME` sin restricciones (sin cambios). Roto a propósito (forzando `isOrderCreation = false`) → el caso de creación de pedido falla como se esperaba → restaurado → verde de nuevo. `mvn test` completo en verde.
