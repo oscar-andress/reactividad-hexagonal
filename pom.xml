@@ -47,6 +47,15 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
+		<!-- Solo el módulo que genera el JSON del spec (/v3/api-docs), no la variante -ui:
+		     su página de Swagger UI rompe con NoSuchMethodError contra Spring Framework 7
+		     (springdoc 2.8.6 todavía no soporta Spring Boot 4; ver docs/openapi.md).
+		     El JSON es lo único que hace falta para alimentar a ZAP. -->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webflux-api</artifactId>
+			<version>2.8.6</version>
+		</dependency>
 		<!-- Librería de JWT standalone — no se usa spring-security-oauth2-jose porque
 		     eso arrastra todo Spring Security, y este proyecto decidió no usarlo (ver
 		     docs/security/threat-model.md). Nimbus es la misma librería que Spring
@@ -382,5 +391,59 @@
 			</plugin>
 		</plugins>
 	</build>
+
+	<profiles>
+		<!-- No corre en el build default (mvn verify normal), solo con -Pgenerate-openapi.
+		     Apunta a un Postgres descartable en el puerto 5433, nunca al 5432 real de
+		     desarrollo. Ver docs/openapi.md para el comando de un solo uso que lo
+		     levanta y lo baja. -->
+		<profile>
+			<id>generate-openapi</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.springframework.boot</groupId>
+						<artifactId>spring-boot-maven-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>pre-integration-test</id>
+								<goals>
+									<goal>start</goal>
+								</goals>
+								<configuration>
+									<jvmArguments>-Dspring.application.admin.enabled=true -Dspring.r2dbc.url=r2dbc:postgresql://localhost:5433/food_menu_reactivo_db -Dspring.flyway.url=jdbc:postgresql://localhost:5433/food_menu_reactivo_db</jvmArguments>
+								</configuration>
+							</execution>
+							<execution>
+								<id>post-integration-test</id>
+								<goals>
+									<goal>stop</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+					<plugin>
+						<groupId>org.springdoc</groupId>
+						<artifactId>springdoc-openapi-maven-plugin</artifactId>
+						<version>1.4</version>
+						<executions>
+							<execution>
+								<id>integration-test</id>
+								<goals>
+									<goal>generate</goal>
+								</goals>
+							</execution>
+						</executions>
+						<configuration>
+							<apiDocsUrl>http://localhost:8080/v3/api-docs</apiDocsUrl>
+							<outputFileName>openapi.json</outputFileName>
+							<outputDir>${project.build.directory}</outputDir>
+							<failOnError>true</failOnError>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 </project>

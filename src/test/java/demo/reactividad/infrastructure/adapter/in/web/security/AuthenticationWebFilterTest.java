@@ -103,6 +103,18 @@ class AuthenticationWebFilterTest {
         verify(chain, never()).filter(any());
     }
 
+    @Test
+    void filter_OnApiDocsPathWithNoAuthHeader_SkipsAuthAndContinuesChain() {
+        ServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/v3/api-docs").build());
+        WebFilterChain chain = chainThatCompletes();
+
+        this.filter.filter(exchange, chain)
+                .as(StepVerifier::create)
+                .verifyComplete();
+
+        verify(chain).filter(exchange);
+    }
+
     private ServerWebExchange exchangeWithToken(String token) {
         return MockServerWebExchange.from(
                 MockServerHttpRequest.get("/").header(SecurityConstants.AUTH_TOKEN_HEADER, token).build());
