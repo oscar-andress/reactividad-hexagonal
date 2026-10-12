@@ -29,6 +29,7 @@ import demo.reactividad.application.port.out.ImageStoragePort;
 import demo.reactividad.application.port.out.MenuBatchFailurePolicy;
 import demo.reactividad.application.port.out.MenuEventPublisher;
 import demo.reactividad.application.port.out.MenuRepositoryPort;
+import demo.reactividad.domain.exception.FeatureDisabledException;
 import demo.reactividad.domain.exception.MenuNotFoundException;
 import demo.reactividad.domain.exception.MenuUnavailableException;
 import demo.reactividad.domain.exception.UnsafeAiResponseException;
@@ -71,7 +72,8 @@ class MenuUseCasesServiceTest {
     void setUp() {
         this.menuUseCasesService = new MenuUseCasesService(
                 this.menuRepositoryPort, this.foodTypeRepositoryPort, this.menuEventPublisher, this.imageStoragePort,
-                this.menuBatchFailurePolicy, this.meterRegistry, this.foodTypeClassifierPort);
+                this.menuBatchFailurePolicy, this.meterRegistry, this.foodTypeClassifierPort,
+                new FoodTypeSuggestionProperties(true));
     }
 
     @Test
@@ -476,5 +478,23 @@ class MenuUseCasesServiceTest {
                 .verify();
 
         verify(this.menuRepositoryPort, never()).save(any());
+    }
+
+    // Kill switch operacional (ver docs/data/feature-flag-reversibility.md) — el
+    // flag se corta ANTES de tocar el repositorio, ni siquiera se consulta si el menú
+    // existe cuando la feature está apagada.
+    @Test
+    void suggestFoodType_WhenFeatureFlagDisabled_ThrowsFeatureDisabledExceptionWithoutTouchingMenu() {
+        MenuUseCasesService disabledService = new MenuUseCasesService(
+                this.menuRepositoryPort, this.foodTypeRepositoryPort, this.menuEventPublisher, this.imageStoragePort,
+                this.menuBatchFailurePolicy, this.meterRegistry, this.foodTypeClassifierPort,
+                new FoodTypeSuggestionProperties(false));
+
+        disabledService.suggestFoodType(MENU_ID)
+                .as(StepVerifier::create)
+                .expectError(FeatureDisabledException.class)
+                .verify();
+
+        verify(this.menuRepositoryPort, never()).findById(any());
     }
 }

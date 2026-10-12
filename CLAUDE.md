@@ -17,12 +17,14 @@ Este documento tiene dos partes. La **Parte 1** es conocimiento de ingeniería d
   - Cero valores mágicos; usa constantes o enumeraciones.
   - Manejo controlado de errores con excepciones o tipos de dominio específicos.
   - Código simple y mínimo para lograr el objetivo: evitar sobreingeniería, abstracciones prematuras o funcionalidad no solicitada.
+- **DEBE** poder apagarse sin redeploy una feature con riesgo operacional genuino (depende de un servicio externo propenso a fallar o encarecerse, es nueva y sin probar en producción real, o su comportamiento es difícil de predecir) — un flag de configuración tipo kill switch, no un flag de rollout gradual (A/B). *Criterio:* si no existe ningún escenario realista donde quisieras apagar solo esa feature sin apagar toda la app (ej. una operación CRUD estable y aburrida), no hace falta el flag — ponerlo en todo por costumbre es la misma sobreingeniería de arriba.
 
 ## 2. Disciplina de verificación
 - **DEBE** romperse a propósito antes de confiar en un fix/test/gate nuevo: revertirlo, confirmar que falla donde se espera, restaurarlo. *Criterio:* un mecanismo que nunca viste fallar no es confiable.
 - **DEBE** verificarse empíricamente el comportamiento real de una librería/framework antes de diseñar sobre él (bytecode, logging verboso, árbol de dependencias real). **NUNCA** asumir por "compila" o "no tiró error".
 - **DEBE** etiquetarse explícitamente un parche como tal ("parche, no causa raíz") cuando el fix completo excede el alcance actual — revisitarlo cuando llegue ese alcance.
 - **NUNCA** tratar cobertura de líneas, mutation score y "tests en verde" como intercambiables. *Criterio:* cada uno detecta un tipo de hueco distinto; ninguno sustituye a los otros dos.
+- **DEBE** verificarse, al romper a propósito una regla de dependencias estática (ArchUnit, jdeps, linters de imports), que la violación introducida sea un uso real (campo, parámetro, tipo de retorno) y no solo un `import` sin usar. *Criterio:* una herramienta que analiza bytecode compilado no ve una dependencia que nunca se materializó en una instrucción real — un `import` sin uso no genera bytecode, así que la regla "pasa" igual sin haber verificado nada; si el "romper a propósito" no dispara la violación esperada, confirmá esto antes de concluir que la regla no sirve.
 
 ## 3. Testing: árbol de decisión
 - **P1 — ¿objetivo?** Probar mi lógica → unitario (mockear lo externo). Probar una integración real → test de integración, sin mockear justo lo que se integra.

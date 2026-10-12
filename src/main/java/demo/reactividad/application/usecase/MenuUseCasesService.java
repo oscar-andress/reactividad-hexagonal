@@ -5,6 +5,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +17,7 @@ import demo.reactividad.application.port.out.ImageStoragePort;
 import demo.reactividad.application.port.out.MenuBatchFailurePolicy;
 import demo.reactividad.application.port.out.MenuEventPublisher;
 import demo.reactividad.application.port.out.MenuRepositoryPort;
+import demo.reactividad.domain.exception.FeatureDisabledException;
 import demo.reactividad.domain.exception.MenuCodeException;
 import demo.reactividad.domain.exception.MenuNotFoundException;
 import demo.reactividad.domain.exception.MenuUnavailableException;
@@ -32,6 +34,7 @@ import reactor.core.publisher.Mono;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@EnableConfigurationProperties(FoodTypeSuggestionProperties.class)
 public class MenuUseCasesService implements MenuUseCases {
 
     private static final Duration IMAGE_URL_EXPIRATION = Duration.ofMinutes(15);
@@ -47,6 +50,7 @@ public class MenuUseCasesService implements MenuUseCases {
     private final MenuBatchFailurePolicy menuBatchFailurePolicy;
     private final MeterRegistry meterRegistry;
     private final FoodTypeClassifierPort foodTypeClassifierPort;
+    private final FoodTypeSuggestionProperties foodTypeSuggestionProperties;
 
     @Override
     @Transactional(readOnly = true)
@@ -127,9 +131,17 @@ public class MenuUseCasesService implements MenuUseCases {
                 .map(menu::withFoodTypes);
     }
 
+    // Kill switch operacional (ver docs/data/feature-flag-reversibility.md): la
+    // sugerencia depende de un LLM externo, con riesgo real de fallo/costo/latencia
+    // impredecible -- hay que poder apagarla sin redeploy si algo sale mal, sin esperar
+    // a que la query de arriba ni el domino se enteren de que el menú existe o no.
     @Override
     @Transactional(readOnly = true)
     public Mono<FoodTypeSuggestion> suggestFoodType(UUID menuId) {
+        if (!this.foodTypeSuggestionProperties.enabled()) {
+            return Mono.error(() -> new FeatureDisabledException(
+                    "Food type suggestion is temporarily disabled", MenuCodeException.FEATURE_DISABLED.name()));
+        }
         return this.menuRepositoryPort.findById(menuId)
                 .switchIfEmpty(Mono.error(() -> new MenuNotFoundException("Menu with id " + menuId + " not found",
                         MenuCodeException.NOT_FOUND.name())))
