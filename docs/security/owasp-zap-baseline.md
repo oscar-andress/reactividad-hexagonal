@@ -54,6 +54,12 @@ Ese token se cargó en ZAP vía **Replacer** (`Options → Replacer`, regla con 
 
 Ver el cierre documentado en `docs/security/threat-model.md` ("Cierre posterior: header `X-Content-Type-Options` faltante"). Un solo hallazgo real: `X-Content-Type-Options Header Missing` (Low/Medium, OWASP A05:2021, CWE-693) en toda respuesta de la API.
 
+## Segunda corrida: ZAP nativo + spec real importado
+
+Pasos posteriores que cambiaron el setup, documentados por separado: se instaló **ZAP Desktop nativo en Windows** (en vez de Docker/Webswing — sin la fricción de red WSL↔Windows de la primera corrida), y se generó un spec real de OpenAPI para importar todas las rutas de una sola vez en vez de descubrirlas a mano (ver `docs/openapi.md`, incluyendo por qué se excluyeron las dos rutas SSE del archivo que se le da a ZAP — el import se trababa en ellas).
+
+En esta corrida, el Active Scan encontró el hallazgo real documentado en `docs/security/threat-model.md` ("Cierre posterior: excepción sin manejar filtraba el stack trace completo") — un `menuId` con formato inválido rompía `UUID.fromString` sin capturar, devolviendo 500 con el stack trace completo. Fix aplicado (ver ese mismo doc) y **re-verificado corriendo el Active Scan de nuevo, con la misma app arreglada**: el reporte posterior da 0 alertas en High/Medium/Low — el único resultado es un `User Agent Fuzzer` Informational, ruido confirmado no relacionado (ver `docs/security/zap-report-guide.md`). Cierra el ciclo completo: hallazgo real → fix → re-verificación con la misma herramienta que lo encontró.
+
 ## Próximo paso: pasar a CI
 
 Antes de automatizar esto en un pipeline, dos reglas no negociables (ver conversación): un **Active Scan** manda payloads de ataque reales, así que **nunca corre contra algo persistente o compartido** — solo contra un entorno efímero (igual que ya hacen los `*IT` con Testcontainers); para CI de rutina conviene el *baseline scan* (`zap-baseline.py`, solo pasivo, no ataca) y dejar el Active Scan completo para un job aparte, menos frecuente.
