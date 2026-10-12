@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "$json = [Console]::In.ReadToEnd() | ConvertFrom-Json; $cmd = $json.tool_input.command; if ($cmd -match 'git\\s+(commit|push)' -or $cmd -match 'gh\\s+pr\\s+(create|merge)') { $out = @{hookSpecificOutput=@{hookEventName='PreToolUse'; permissionDecision='ask'; permissionDecisionReason='Este proyecto exige tu aprobacion explicita antes de git commit, git push o gh pr create/merge.'}}; $out | ConvertTo-Json -Compress -Depth 5 }"
+          }
+        ]
+      }
+    ]
+  }
+}
