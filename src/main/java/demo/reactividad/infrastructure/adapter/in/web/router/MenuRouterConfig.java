@@ -140,6 +140,7 @@ public class MenuRouterConfig {
             .onError(ImageStorageException.class, this.globalExceptionHandler::handleImageStorageException)
             .onError(ConstraintViolationException.class, this.globalExceptionHandler::handleConstraintViolationException)
             .onError(RequestNotPermitted.class, this.globalExceptionHandler::handleRequestNotPermitted)
+            .onError(IllegalArgumentException.class, this.globalExceptionHandler::handleIllegalArgumentException)
             .build();
     }
 }
