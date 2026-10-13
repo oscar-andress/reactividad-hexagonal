@@ -20,7 +20,7 @@ class OrderPersistenceMapperTest {
         UUID id = UUID.randomUUID();
         UUID menuId = UUID.randomUUID();
         LocalDateTime createdAt = LocalDateTime.of(2026, 1, 1, 10, 0);
-        OrderEntity entity = new OrderEntity(id, menuId, "Menu del dia", 2, createdAt);
+        OrderEntity entity = new OrderEntity(id, menuId, "Menu del dia", 2, createdAt, "idem-key-1");
 
         Order order = this.mapper.toDomain(entity);
 
@@ -29,6 +29,7 @@ class OrderPersistenceMapperTest {
         assertEquals("Menu del dia", order.getMenuTitleSnapshot());
         assertEquals(2, order.getQuantity());
         assertEquals(createdAt, order.getCreatedAt());
+        assertEquals("idem-key-1", order.getIdempotencyKey());
     }
 
     @Test
@@ -36,7 +37,7 @@ class OrderPersistenceMapperTest {
         UUID id = UUID.randomUUID();
         MenuId menuId = new MenuId(UUID.randomUUID());
         LocalDateTime createdAt = LocalDateTime.of(2026, 1, 1, 10, 0);
-        Order order = new Order(id, menuId, "Menu del dia", 2, createdAt);
+        Order order = new Order(id, menuId, "Menu del dia", 2, createdAt, "idem-key-1");
 
         OrderEntity entity = this.mapper.toEntity(order);
 
@@ -45,5 +46,6 @@ class OrderPersistenceMapperTest {
         assertEquals("Menu del dia", entity.getMenuTitleSnapshot());
         assertEquals(2, entity.getQuantity());
         assertEquals(createdAt, entity.getCreatedAt());
+        assertEquals("idem-key-1", entity.getIdempotencyKey());
     }
 }

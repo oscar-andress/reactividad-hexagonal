@@ -6,6 +6,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public interface OrderUseCases {
-    Mono<Order> createOrder(MenuId menuId, int quantity);
+    Mono<Order> createOrder(MenuId menuId, int quantity, String idempotencyKey);
     Flux<Order> streamOrders();
 }

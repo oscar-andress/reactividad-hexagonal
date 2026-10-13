@@ -20,7 +20,7 @@ class OrderWebMapperTest {
         UUID id = UUID.randomUUID();
         MenuId menuId = new MenuId(UUID.randomUUID());
         LocalDateTime createdAt = LocalDateTime.of(2026, 1, 1, 10, 0);
-        Order order = new Order(id, menuId, "Menu del dia", 3, createdAt);
+        Order order = new Order(id, menuId, "Menu del dia", 3, createdAt, null);
 
         OrderResponseDTO dto = this.mapper.toResponseDTO(order);
 

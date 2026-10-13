@@ -13,6 +13,7 @@ public final class OrderTestDataBuilder {
     private String menuTitleSnapshot = "DEVOS";
     private int quantity = 1;
     private LocalDateTime createdAt;
+    private String idempotencyKey;
 
     private OrderTestDataBuilder() {
     }
@@ -46,7 +47,13 @@ public final class OrderTestDataBuilder {
         return this;
     }
 
+    public OrderTestDataBuilder withIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
+        return this;
+    }
+
     public Order build() {
-        return new Order(this.id, this.menuId, this.menuTitleSnapshot, this.quantity, this.createdAt);
+        return new Order(this.id, this.menuId, this.menuTitleSnapshot, this.quantity, this.createdAt,
+                this.idempotencyKey);
     }
 }

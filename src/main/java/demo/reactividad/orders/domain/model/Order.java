@@ -18,8 +18,10 @@ public class Order {
     private final String menuTitleSnapshot;
     private final int quantity;
     private final LocalDateTime createdAt;
+    private final String idempotencyKey;
 
-    public Order(UUID id, MenuId menuId, String menuTitleSnapshot, int quantity, LocalDateTime createdAt) {
+    public Order(UUID id, MenuId menuId, String menuTitleSnapshot, int quantity, LocalDateTime createdAt,
+            String idempotencyKey) {
         if (menuId == null) {
             throw new InvalidOrderException("An order must reference a menu");
         }
@@ -29,14 +31,18 @@ public class Order {
         if (quantity < MINIMUM_QUANTITY) {
             throw new InvalidOrderException("Order quantity must be at least " + MINIMUM_QUANTITY);
         }
+        if (idempotencyKey != null && idempotencyKey.isBlank()) {
+            throw new InvalidOrderException("Idempotency key must not be blank when present");
+        }
         this.id = id;
         this.menuId = menuId;
         this.menuTitleSnapshot = menuTitleSnapshot;
         this.quantity = quantity;
         this.createdAt = createdAt;
+        this.idempotencyKey = idempotencyKey;
     }
 
-    public Order(MenuId menuId, String menuTitleSnapshot, int quantity) {
-        this(null, menuId, menuTitleSnapshot, quantity, null);
+    public Order(MenuId menuId, String menuTitleSnapshot, int quantity, String idempotencyKey) {
+        this(null, menuId, menuTitleSnapshot, quantity, null, idempotencyKey);
     }
 }

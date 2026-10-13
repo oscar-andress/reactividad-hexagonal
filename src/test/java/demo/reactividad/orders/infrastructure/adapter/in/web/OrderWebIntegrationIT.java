@@ -2,10 +2,17 @@ package demo.reactividad.orders.infrastructure.adapter.in.web;
 
 import static demo.reactividad.orders.testsupport.fixtures.OrderCreateRequestDTOTestDataBuilder.anOrderCreateRequestDTO;
 import static demo.reactividad.testsupport.fixtures.MenuEntityTestDataBuilder.aMenuEntity;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +30,7 @@ import demo.reactividad.infrastructure.adapter.out.persistence.entity.MenuEntity
 import demo.reactividad.infrastructure.adapter.out.persistence.repository.MenuR2dbcRepository;
 import demo.reactividad.orders.infrastructure.adapter.in.web.dto.request.OrderCreateRequestDTO;
 import demo.reactividad.orders.infrastructure.adapter.in.web.dto.response.OrderResponseDTO;
+import demo.reactividad.orders.infrastructure.adapter.out.persistence.repository.OrderR2dbcRepository;
 import demo.reactividad.testsupport.containers.AbstractPostgresContainerTest;
 import reactor.test.StepVerifier;
 
@@ -42,6 +50,9 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
     private MenuR2dbcRepository menuR2dbcRepository;
 
     @Autowired
+    private OrderR2dbcRepository orderR2dbcRepository;
+
+    @Autowired
     private JwtTokenService jwtTokenService;
 
     private MenuEntity existingMenu;
@@ -55,6 +66,7 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
         this.existingMenu = this.menuR2dbcRepository.deleteAll()
                 .then(this.menuR2dbcRepository.save(aMenuEntity().build()))
                 .block();
+        this.orderR2dbcRepository.deleteAll().block();
     }
 
     @Test
@@ -145,5 +157,83 @@ class OrderWebIntegrationIT extends AbstractPostgresContainerTest {
                 .expectNextMatches(received -> received.quantity() == 5)
                 .thenCancel()
                 .verify(STREAM_TIMEOUT);
+    }
+
+    // Ver docs/adr/0002-order-idempotency-and-menu-lookup-resilience.md: simula un
+    // cliente que reintenta la MISMA request (timeout de red, no sabe si la primera
+    // llegó a procesarse) -- la segunda llamada con la misma Idempotency-Key no debe
+    // crear un segundo pedido.
+    @Test
+    void postOrder_WithSameIdempotencyKeyTwiceSequentially_CreatesOnlyOneOrder() {
+        OrderCreateRequestDTO order = anOrderCreateRequestDTO().withMenuId(this.existingMenu.getId()).withQuantity(3).build();
+        String idempotencyKey = "sequential-retry-key";
+
+        UUID firstOrderId = this.webTestClient.post()
+                .uri(ORDER_PATH + "/")
+                .header(AUTH_HEADER, this.primeToken)
+                .header("Idempotency-Key", idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(order)
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(OrderResponseDTO.class)
+                .returnResult()
+                .getResponseBody()
+                .orderId();
+
+        UUID secondOrderId = this.webTestClient.post()
+                .uri(ORDER_PATH + "/")
+                .header(AUTH_HEADER, this.primeToken)
+                .header("Idempotency-Key", idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(order)
+                .exchange()
+                .expectStatus().isCreated()
+                .expectBody(OrderResponseDTO.class)
+                .returnResult()
+                .getResponseBody()
+                .orderId();
+
+        assertEquals(firstOrderId, secondOrderId);
+        assertEquals(1, this.orderR2dbcRepository.count().block());
+    }
+
+    // El caso real que motiva esto: dos requests CONCURRENTES con la misma clave (no
+    // secuenciales) -- un SELECT-antes-de-INSERT no alcanza por sí solo, la fuente de
+    // verdad es la constraint única de Postgres (migración V5) + el catch de
+    // DuplicateKeyException en OrderUseCasesService.
+    @Test
+    void postOrder_WithSameIdempotencyKeyConcurrently_CreatesOnlyOneOrder() throws InterruptedException {
+        OrderCreateRequestDTO order = anOrderCreateRequestDTO().withMenuId(this.existingMenu.getId()).withQuantity(1).build();
+        String idempotencyKey = "concurrent-retry-key";
+        int concurrentRequests = 8;
+        ExecutorService executor = Executors.newFixedThreadPool(concurrentRequests);
+
+        try {
+            List<CompletableFuture<UUID>> requests = IntStream.range(0, concurrentRequests)
+                    .mapToObj(i -> CompletableFuture.supplyAsync(() -> this.webTestClient.post()
+                            .uri(ORDER_PATH + "/")
+                            .header(AUTH_HEADER, this.primeToken)
+                            .header("Idempotency-Key", idempotencyKey)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .bodyValue(order)
+                            .exchange()
+                            .expectStatus().isCreated()
+                            .expectBody(OrderResponseDTO.class)
+                            .returnResult()
+                            .getResponseBody()
+                            .orderId(), executor))
+                    .toList();
+
+            List<UUID> orderIds = requests.stream().map(CompletableFuture::join).collect(Collectors.toSet()).stream().toList();
+
+            assertEquals(1, orderIds.size(),
+                    "Las " + concurrentRequests + " respuestas deberían apuntar todas al mismo pedido");
+            assertEquals(1, this.orderR2dbcRepository.count().block(),
+                    "Solo debería haberse insertado una fila, aunque " + concurrentRequests
+                            + " requests concurrentes compartieran la misma Idempotency-Key");
+        } finally {
+            executor.shutdown();
+        }
     }
 }

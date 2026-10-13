@@ -21,4 +21,10 @@ public class OrderRepositoryAdapter implements OrderRepositoryPort {
         return this.orderR2dbcRepository.save(this.orderPersistenceMapper.toEntity(order))
                 .map(this.orderPersistenceMapper::toDomain);
     }
+
+    @Override
+    public Mono<Order> findByIdempotencyKey(String idempotencyKey) {
+        return this.orderR2dbcRepository.findByIdempotencyKey(idempotencyKey)
+                .map(this.orderPersistenceMapper::toDomain);
+    }
 }
