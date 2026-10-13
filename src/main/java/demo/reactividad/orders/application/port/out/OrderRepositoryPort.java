@@ -5,4 +5,5 @@ import reactor.core.publisher.Mono;
 
 public interface OrderRepositoryPort {
     Mono<Order> save(Order order);
+    Mono<Order> findByIdempotencyKey(String idempotencyKey);
 }

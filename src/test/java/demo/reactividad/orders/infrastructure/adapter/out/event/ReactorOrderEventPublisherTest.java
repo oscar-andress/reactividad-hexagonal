@@ -26,7 +26,7 @@ class ReactorOrderEventPublisherTest {
 
     @Test
     void publish_ThenSubscribe_EmitsThePublishedOrder() {
-        Order order = new Order(new MenuId(UUID.randomUUID()), "Menu del dia", 2);
+        Order order = new Order(new MenuId(UUID.randomUUID()), "Menu del dia", 2, null);
 
         StepVerifier.create(this.publisher.subscribe())
                 .then(() -> this.publisher.publish(order))
@@ -39,7 +39,7 @@ class ReactorOrderEventPublisherTest {
     void publish_FromManyThreadsConcurrently_NoEventIsSilentlyLost() throws InterruptedException {
         int totalOrders = 200;
         List<Order> orders = IntStream.range(0, totalOrders)
-                .mapToObj(i -> new Order(new MenuId(UUID.randomUUID()), "Menu " + i, 1))
+                .mapToObj(i -> new Order(new MenuId(UUID.randomUUID()), "Menu " + i, 1, null))
                 .toList();
 
         List<Order> received = new CopyOnWriteArrayList<>();

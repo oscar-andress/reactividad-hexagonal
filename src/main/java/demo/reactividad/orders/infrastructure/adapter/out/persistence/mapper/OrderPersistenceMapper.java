@@ -11,11 +11,11 @@ public class OrderPersistenceMapper {
 
     public Order toDomain(OrderEntity entity) {
         return new Order(entity.getId(), new MenuId(entity.getMenuId()), entity.getMenuTitleSnapshot(),
-                entity.getQuantity(), entity.getCreatedAt());
+                entity.getQuantity(), entity.getCreatedAt(), entity.getIdempotencyKey());
     }
 
     public OrderEntity toEntity(Order order) {
         return new OrderEntity(order.getId(), order.getMenuId().value(), order.getMenuTitleSnapshot(),
-                order.getQuantity(), order.getCreatedAt());
+                order.getQuantity(), order.getCreatedAt(), order.getIdempotencyKey());
     }
 }

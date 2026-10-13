@@ -325,3 +325,43 @@ class S3ImageStorageAdapterResilienceTest {
 **Verificado rompiendo a propósito:** se quitó momentáneamente `@TimeLimiter` de `upload` y se corrió el test — se colgó indefinidamente (`VerifySubscriber timed out`), confirmando el problema real que el ejercicio describe. Restaurado el fix, vuelve a pasar.
 
 **Resultado final:** 71 tests verdes, suite completa sin regresiones.
+
+## Extensión posterior: `MenuLookupPortAdapter` gana `@Retry` + `@TimeLimiter` (Fase 3, ejercicio E4)
+
+El ejercicio 2 de arriba dejó `MenuLookupPortAdapter` solo con `@Bulkhead` — a propósito, en su momento, porque todavía no hacía falta más. La Fase 3 del learning path (`C:\Users\oscar.vega\Documents\Personal\Ruta de aprendizaje - nivel Semi-Senior.md`, E4: "prever qué pasa cuando el otro lado no responde") pidió completar esa brecha: qué pasa si `Menu` tarda, falla, o el cliente reintenta la request completa. El detalle completo de esta extensión (incluyendo la idempotencia de `POST /api/v1/order`, que es la otra mitad del mismo ejercicio) vive en `docs/adr/0002-order-idempotency-and-menu-lookup-resilience.md`.
+
+Resumen del fix: mismo patrón que el ejercicio 1 de este doc — `@Retry` + `Mono.defer(...)` (obligatorio, misma razón) + `@TimeLimiter`, apilados junto al `@Bulkhead` que ya existía. La traducción de "no existe" sigue viviendo *dentro* del `defer`, antes de que los aspectos puedan verla — por eso nunca se reintenta un menú que legítimamente no existe, sin necesidad de configurar ninguna exclusión en `@Retry`.
+
+### Hallazgo real: un test intermitente por fuga de permisos del bulkhead entre tests
+
+Al agregar los tests nuevos de `@Retry`/`@TimeLimiter` en `MenuLookupPortAdapterResilienceTest`, uno de ellos (`findMenuSnapshot_WhenMenuDoesNotExist_NeverRetries`) empezó a fallar — pero no siempre, y con un error que no tenía nada que ver con lo que el test afirmaba:
+
+```
+expectation "expectComplete" failed (expected: onComplete();
+actual: onError(BulkheadFullException: Bulkhead 'orders-menu-lookup' is full...))
+```
+
+**Tres hipótesis, antes de tocar el fix:**
+1. ¿El `@Retry`/`@TimeLimiter` nuevo interfiere con el bulkhead de alguna forma? Descartado con un dato: el mismo error aparecía incluso corriendo el test de forma aislada contra el método ya existente, sin usar `@Retry` para nada en ese camino.
+2. ¿La config de `resilience4j.bulkhead.instances.orders-menu-lookup` cambió? Descartado leyendo `application.properties` — seguía igual, `max-concurrent-calls=3`.
+3. ¿Algún test anterior en la misma clase deja el bulkhead ocupado? Confirmado leyendo `findMenuSnapshot_WhenConcurrentCallsExceedBulkheadLimit_...` y `save_WhileMenuLookupBulkheadIsSaturated_...`: ambos ocupan los 3 permisos con `this.menuLookupPort.findMenuSnapshot(menuId).subscribe()` sobre un `Mono.never()` — y **nunca cancelan esa suscripción**.
+
+**Causa raíz:** el bean del bulkhead es un singleton del contexto de Spring (`@SpringBootTest`), compartido entre **todos** los métodos de la clase de test — no se reinicia entre `@Test`. Una suscripción a `Mono.never()` que nunca se cancela deja ese permiso ocupado para siempre, filtrándose a cualquier test posterior en la misma clase que use el mismo carril. El orden real de ejecución de JUnit 5 (no garantizado, pero determinista para una misma versión/JVM) decidía si el test nuevo corría antes o después de que el carril ya estuviera saturado — de ahí la intermitencia real si se reordenan o filtran tests.
+
+**Fix:** capturar el `Disposable` de cada suscripción que satura el bulkhead y liberarlo explícitamente en un `@AfterEach`, en vez de dejarlo colgado:
+
+```java
+private final List<Disposable> leakedSubscriptions = new ArrayList<>();
+
+@AfterEach
+void releaseBulkheadPermits() {
+    this.leakedSubscriptions.forEach(Disposable::dispose);
+    this.leakedSubscriptions.clear();
+}
+```
+
+y en cada test que ocupa el bulkhead a propósito: `this.leakedSubscriptions.add(this.menuLookupPort.findMenuSnapshot(menuId).subscribe());` en vez de `.subscribe()` suelto.
+
+Es un tipo de test intermitente distinto del ya documentado en `docs/security/rate-limiting.md` (ahí la fragilidad venía de disparar la ráfaga en secuencia en vez de concurrentemente, dentro de un único test). Acá la causa es otra: un mecanismo de aislamiento de recursos (`@Bulkhead`) es, por diseño, un estado compartido entre tests dentro del mismo contexto de Spring — y un test que lo satura sin liberar sus suscripciones se convierte, sin querer, en una fuente de acoplamiento oculto hacia cualquier test que corra después en la misma clase.
+
+**Resultado final:** 5 tests en `MenuLookupPortAdapterResilienceTest` (antes 2), los dos nuevos (`@Retry`, `@TimeLimiter`) verificados rompiendo a propósito cada mecanismo por separado (quitar la anotación, quitar el `Mono.defer`) — ambos confirmados fallando exactamente donde se esperaba antes de restaurar. `mvn verify` completo (con Docker vía WSL, `DOCKER_HOST=tcp://localhost:2375`) en verde: 127 tests unitarios + 30 de integración.

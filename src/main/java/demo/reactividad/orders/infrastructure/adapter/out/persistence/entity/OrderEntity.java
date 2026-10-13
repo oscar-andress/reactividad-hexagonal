@@ -36,4 +36,7 @@ public class OrderEntity {
 
     @Column("order_created_at")
     private LocalDateTime createdAt;
+
+    @Column("order_idempotency_key")
+    private String idempotencyKey;
 }

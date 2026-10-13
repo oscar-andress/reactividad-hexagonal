@@ -19,14 +19,23 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class OrderHandler {
 
+    private static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+
     private final OrderUseCases orderUseCases;
     private final OrderWebMapper orderWebMapper;
 
     public Mono<ServerResponse> createOrder(ServerRequest request) {
+        String idempotencyKey = normalizeIdempotencyKey(request.headers().firstHeader(IDEMPOTENCY_KEY_HEADER));
         return request.bodyToMono(OrderCreateRequestDTO.class)
-                .flatMap(dto -> this.orderUseCases.createOrder(new MenuId(dto.menuId()), dto.quantity()))
+                .flatMap(dto -> this.orderUseCases.createOrder(new MenuId(dto.menuId()), dto.quantity(), idempotencyKey))
                 .map(this.orderWebMapper::toResponseDTO)
                 .flatMap(dto -> ServerResponse.status(HttpStatus.CREATED).bodyValue(dto));
+    }
+
+    // Un header presente pero vacío ("Idempotency-Key: ") se trata igual que ausente
+    // -- nunca como una clave real de un solo caracter vacío.
+    private String normalizeIdempotencyKey(String rawHeaderValue) {
+        return (rawHeaderValue == null || rawHeaderValue.isBlank()) ? null : rawHeaderValue;
     }
 
     public Mono<ServerResponse> getOrderStream(ServerRequest request) {

@@ -13,6 +13,7 @@ import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
 import demo.reactividad.orders.domain.exception.InvalidOrderException;
+import demo.reactividad.orders.domain.exception.MenuLookupUnavailableException;
 import demo.reactividad.orders.domain.exception.MenuNotFoundForOrderException;
 import demo.reactividad.orders.infrastructure.adapter.in.web.OrderHandler;
 import demo.reactividad.orders.infrastructure.adapter.in.web.dto.request.OrderCreateRequestDTO;
@@ -65,6 +66,8 @@ public class OrderRouterConfig {
             .onError(InvalidOrderException.class, this.orderExceptionHandler::handleInvalidOrderException)
             .onError(MenuNotFoundForOrderException.class,
                      this.orderExceptionHandler::handleMenuNotFoundForOrderException)
+            .onError(MenuLookupUnavailableException.class,
+                     this.orderExceptionHandler::handleMenuLookupUnavailableException)
             .build();
     }
 }

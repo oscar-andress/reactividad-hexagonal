@@ -9,6 +9,7 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 
 import demo.reactividad.infrastructure.adapter.in.web.exception.ErrorResponse;
 import demo.reactividad.orders.domain.exception.InvalidOrderException;
+import demo.reactividad.orders.domain.exception.MenuLookupUnavailableException;
 import demo.reactividad.orders.domain.exception.MenuNotFoundForOrderException;
 import reactor.core.publisher.Mono;
 
@@ -17,6 +18,7 @@ public class OrderExceptionHandler {
 
     private static final String INVALID_ORDER_CODE = "INVALID_ORDER";
     private static final String MENU_NOT_FOUND_CODE = "MENU_NOT_FOUND";
+    private static final String MENU_LOOKUP_UNAVAILABLE_CODE = "MENU_LOOKUP_UNAVAILABLE";
 
     public Mono<ServerResponse> handleInvalidOrderException(InvalidOrderException ex, ServerRequest request) {
         return buildResponse(ex.getMessage(), INVALID_ORDER_CODE, request, HttpStatus.BAD_REQUEST);
@@ -25,6 +27,11 @@ public class OrderExceptionHandler {
     public Mono<ServerResponse> handleMenuNotFoundForOrderException(
             MenuNotFoundForOrderException ex, ServerRequest request) {
         return buildResponse(ex.getMessage(), MENU_NOT_FOUND_CODE, request, HttpStatus.NOT_FOUND);
+    }
+
+    public Mono<ServerResponse> handleMenuLookupUnavailableException(
+            MenuLookupUnavailableException ex, ServerRequest request) {
+        return buildResponse(ex.getMessage(), MENU_LOOKUP_UNAVAILABLE_CODE, request, HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     private Mono<ServerResponse> buildResponse(String message, String errorCode, ServerRequest request,

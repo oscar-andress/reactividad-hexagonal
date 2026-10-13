@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.r2dbc.test.autoconfigure.DataR2dbcTest;
+import org.springframework.dao.DuplicateKeyException;
 
 import demo.reactividad.orders.infrastructure.adapter.out.persistence.entity.OrderEntity;
 import demo.reactividad.orders.infrastructure.adapter.out.persistence.repository.OrderR2dbcRepository;
@@ -57,6 +58,54 @@ class OrderR2dbcRepositoryIT extends AbstractPostgresContainerTest {
         this.orderR2dbcRepository.save(invalidOrder)
                 .as(StepVerifier::create)
                 .expectError()
+                .verify();
+    }
+
+    @Test
+    void findByIdempotencyKey_WhenPresent_ReturnsTheMatchingOrder() {
+        this.orderR2dbcRepository.save(anOrderEntity().withIdempotencyKey("idem-key-1").build()).block();
+
+        this.orderR2dbcRepository.findByIdempotencyKey("idem-key-1")
+                .as(StepVerifier::create)
+                .assertNext(found -> Assertions.assertEquals("idem-key-1", found.getIdempotencyKey()))
+                .expectComplete()
+                .verify();
+    }
+
+    @Test
+    void findByIdempotencyKey_WhenAbsent_ReturnsEmpty() {
+        this.orderR2dbcRepository.findByIdempotencyKey("does-not-exist")
+                .as(StepVerifier::create)
+                .expectComplete()
+                .verify();
+    }
+
+    // El índice único parcial de la migración V5 (ver docs/adr/0002-order-idempotency-
+    // and-menu-lookup-resilience.md) es la fuente real de verdad de la deduplicación --
+    // esto confirma, contra Postgres real, que SÍ rechaza una segunda fila con la misma
+    // clave, y que null no cuenta como "la misma clave" entre sí.
+    @Test
+    void save_WhenIdempotencyKeyAlreadyExistsOnAnotherRow_FailsWithDuplicateKeyException() {
+        this.orderR2dbcRepository.save(anOrderEntity().withIdempotencyKey("idem-key-2").build()).block();
+        OrderEntity secondOrderWithSameKey = anOrderEntity().withIdempotencyKey("idem-key-2").build();
+
+        this.orderR2dbcRepository.save(secondOrderWithSameKey)
+                .as(StepVerifier::create)
+                .expectError(DuplicateKeyException.class)
+                .verify();
+    }
+
+    @Test
+    void save_MultipleOrdersWithoutIdempotencyKey_AreAllAllowed() {
+        this.orderR2dbcRepository.save(anOrderEntity().withIdempotencyKey(null).build())
+                .as(StepVerifier::create)
+                .expectNextCount(1)
+                .expectComplete()
+                .verify();
+        this.orderR2dbcRepository.save(anOrderEntity().withIdempotencyKey(null).build())
+                .as(StepVerifier::create)
+                .expectNextCount(1)
+                .expectComplete()
                 .verify();
     }
 }
